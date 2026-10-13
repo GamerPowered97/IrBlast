@@ -2,11 +2,13 @@ package com.example.irblast.encoders
 
 import com.example.irblast.data.ir.encoders.JvcEncoder
 import com.example.irblast.data.ir.encoders.NecEncoder
+import com.example.irblast.data.ir.encoders.PanasonicEncoder
 import com.example.irblast.data.ir.encoders.ProntoHexParser
 import com.example.irblast.data.ir.encoders.ProtocolEncoder
 import com.example.irblast.data.ir.encoders.RawPatternParser
 import com.example.irblast.data.ir.encoders.Rc5Encoder
 import com.example.irblast.data.ir.encoders.Rc6Encoder
+import com.example.irblast.data.ir.encoders.SharpEncoder
 import com.example.irblast.data.ir.encoders.SonyEncoder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -21,13 +23,27 @@ class ProtocolEncodersTest {
         val signal = NecEncoder.encode(device = 0x04, subDevice = -1, function = 0x08)
         assertEquals(38000, signal.frequencyHz)
         assertEquals("NEC", signal.protocol)
-        // 2 header + 32 * 2 bits + 1 stop bit = 67 elements
-        assertEquals(67, signal.patternMicros.size)
+        // 2 header + 32 * 2 bits + 1 stop bit + 1 trailing space = 68 elements
+        assertEquals(68, signal.patternMicros.size)
         // Check leader
         assertEquals(9000, signal.patternMicros[0])
         assertEquals(4500, signal.patternMicros[1])
         // Stop bit
         assertEquals(560, signal.patternMicros[66])
+        // Trailing space
+        assertEquals(40500, signal.patternMicros[67])
+    }
+
+    @Test
+    fun testNecEncoder_repeatBursts() {
+        val signal = NecEncoder.encode(device = 0x04, subDevice = -1, function = 0x08, repeats = 2)
+        assertEquals(38000, signal.frequencyHz)
+        // 68 elements (leader frame) + 4 elements (repeat burst [9000, 2250, 560, 96190]) = 72 elements
+        assertEquals(72, signal.patternMicros.size)
+        assertEquals(9000, signal.patternMicros[68])
+        assertEquals(2250, signal.patternMicros[69])
+        assertEquals(560, signal.patternMicros[70])
+        assertEquals(96190, signal.patternMicros[71])
     }
 
     @Test
@@ -35,7 +51,7 @@ class ProtocolEncodersTest {
         // Samsung TV Power: device = 7, subDevice = 7, function = 2
         val signal = NecEncoder.encode(device = 7, subDevice = 7, function = 2)
         assertEquals(38000, signal.frequencyHz)
-        assertEquals(67, signal.patternMicros.size)
+        assertEquals(68, signal.patternMicros.size)
 
         // Verify Byte 0 (device = 7): bits 0, 1, 2 are 1 (ONE_SPACE = 1690)
         assertEquals(1690, signal.patternMicros[3])
@@ -64,10 +80,10 @@ class ProtocolEncodersTest {
     @Test
     fun testNecEncoder_boundaryValues() {
         val sig0 = NecEncoder.encode(device = 0, subDevice = 0, function = 0)
-        assertEquals(67, sig0.patternMicros.size)
+        assertEquals(68, sig0.patternMicros.size)
 
         val sig255 = NecEncoder.encode(device = 255, subDevice = 255, function = 255)
-        assertEquals(67, sig255.patternMicros.size)
+        assertEquals(68, sig255.patternMicros.size)
     }
 
     @Test
@@ -111,6 +127,7 @@ class ProtocolEncodersTest {
         assertEquals(36000, signal.frequencyHz)
         assertEquals("RC5", signal.protocol)
         assertTrue(signal.patternMicros.isNotEmpty())
+        assertEquals("RC5 pulse array must have even length", 0, signal.patternMicros.size % 2)
         val duration = signal.totalDurationMs
         assertTrue("RC5 duration should be around 24ms, was: $duration", duration in 20..30)
     }
@@ -121,6 +138,7 @@ class ProtocolEncodersTest {
         val signal = Rc5Encoder.encode(device = 0, function = 65)
         assertEquals("RC5", signal.protocol)
         assertTrue(signal.patternMicros.isNotEmpty())
+        assertEquals("RC5 pulse array must have even length", 0, signal.patternMicros.size % 2)
     }
 
     @Test
@@ -129,6 +147,7 @@ class ProtocolEncodersTest {
         assertEquals(36000, signal.frequencyHz)
         assertEquals("RC6", signal.protocol)
         assertTrue(signal.patternMicros.isNotEmpty())
+        assertEquals("RC6 pulse array must have even length", 0, signal.patternMicros.size % 2)
         assertEquals(2666, signal.patternMicros[0])
         assertEquals(889, signal.patternMicros[1])
     }
@@ -138,10 +157,35 @@ class ProtocolEncodersTest {
         val signal = JvcEncoder.encode(device = 3, function = 14)
         assertEquals(38000, signal.frequencyHz)
         assertEquals("JVC", signal.protocol)
-        assertEquals(35, signal.patternMicros.size)
+        // 2 leader + 16 dev + 16 func + 1 stop + 1 trailing space = 36 elements
+        assertEquals(36, signal.patternMicros.size)
         assertEquals(8400, signal.patternMicros[0])
         assertEquals(4200, signal.patternMicros[1])
         assertEquals(526, signal.patternMicros[34])
+        assertEquals(50000, signal.patternMicros[35])
+    }
+
+    @Test
+    fun testPanasonicEncoder() {
+        val signal = PanasonicEncoder.encode(device = 128, subDevice = 0, function = 32)
+        assertEquals(37000, signal.frequencyHz)
+        assertEquals("PANASONIC", signal.protocol)
+        // 2 leader + 48*2 data + 1 stop + 1 trailing space = 100 elements
+        assertEquals(100, signal.patternMicros.size)
+        assertEquals(3456, signal.patternMicros[0])
+        assertEquals(1728, signal.patternMicros[1])
+        assertEquals(432, signal.patternMicros[98])
+        assertEquals(74000, signal.patternMicros[99])
+    }
+
+    @Test
+    fun testSharpEncoder() {
+        val signal = SharpEncoder.encode(device = 1, function = 20)
+        assertEquals(38000, signal.frequencyHz)
+        assertEquals("SHARP", signal.protocol)
+        // 2 frames * (15*2 + 2) = 64 elements
+        assertEquals(64, signal.patternMicros.size)
+        assertEquals(0, signal.patternMicros.size % 2)
     }
 
     @Test
@@ -232,7 +276,77 @@ class ProtocolEncodersTest {
         assertNotNull(jvc)
         assertEquals("JVC", jvc?.protocol)
 
+        val panasonic = ProtocolEncoder.encode("Panasonic", 128, 0, 32)
+        assertNotNull(panasonic)
+        assertEquals("PANASONIC", panasonic?.protocol)
+
+        val sharp = ProtocolEncoder.encode("Sharp", 1, -1, 20)
+        assertNotNull(sharp)
+        assertEquals("SHARP", sharp?.protocol)
+
+        val denon = ProtocolEncoder.encode("Denon", 12, -1, 127)
+        assertNotNull(denon)
+        assertEquals("SHARP", denon?.protocol)
+
         val unknown = ProtocolEncoder.encode("UNKNOWN_PROTO", 0, -1, 1)
         assertNull(unknown)
+
+        val teacK = ProtocolEncoder.encode("TEAC-K", 128, 0, 32)
+        assertNotNull(teacK)
+        assertEquals("PANASONIC", teacK?.protocol)
+    }
+
+    @Test
+    fun testRc5Encoder_repeatFrames() {
+        val signal = Rc5Encoder.encode(device = 0, function = 12, repeats = 2)
+        assertEquals(36000, signal.frequencyHz)
+        assertEquals("RC5", signal.protocol)
+        assertEquals("RC5 repeat frame array must have even length", 0, signal.patternMicros.size % 2)
+        assertTrue("RC5 2-frame duration must be > 100ms", signal.totalDurationMs > 100)
+    }
+
+    @Test
+    fun testRc6Encoder_repeatFrames() {
+        val signal = Rc6Encoder.encode(device = 0, function = 12, repeats = 2)
+        assertEquals(36000, signal.frequencyHz)
+        assertEquals("RC6", signal.protocol)
+        assertEquals("RC6 repeat frame array must have even length", 0, signal.patternMicros.size % 2)
+        assertTrue("RC6 2-frame duration must be > 100ms", signal.totalDurationMs > 100)
+    }
+
+    @Test
+    fun testJvcEncoder_repeatFrames() {
+        val signal = JvcEncoder.encode(device = 3, function = 14, repeats = 2)
+        assertEquals(38000, signal.frequencyHz)
+        assertEquals(72, signal.patternMicros.size)
+        assertEquals(0, signal.patternMicros.size % 2)
+    }
+
+    @Test
+    fun testPanasonicEncoder_repeatFrames() {
+        val signal = PanasonicEncoder.encode(device = 128, subDevice = 0, function = 32, repeats = 2)
+        assertEquals(37000, signal.frequencyHz)
+        assertEquals(200, signal.patternMicros.size)
+        assertEquals(0, signal.patternMicros.size % 2)
+    }
+
+    @Test
+    fun testSharpEncoder_repeatFrames() {
+        val signal = SharpEncoder.encode(device = 1, function = 20, repeats = 2)
+        assertEquals(38000, signal.frequencyHz)
+        assertEquals(128, signal.patternMicros.size)
+        assertEquals(0, signal.patternMicros.size % 2)
+    }
+
+    @Test
+    fun testRawPatternParser_oddPadding() {
+        // 3 pulses (odd): must be padded to 4 pulses (even)
+        val raw = "9000, 4500, 560"
+        val result = RawPatternParser.parse(raw, 38000)
+        assertTrue(result.isSuccess)
+        val signal = result.getOrThrow()
+        assertEquals(4, signal.patternMicros.size)
+        assertEquals(0, signal.patternMicros.size % 2)
+        assertEquals(20000, signal.patternMicros[3])
     }
 }

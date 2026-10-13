@@ -62,6 +62,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import com.example.irblast.IrBlastAppContainer
 import com.example.irblast.domain.model.IrSignal
 import com.example.irblast.domain.model.IrdbCandidate
@@ -84,6 +86,7 @@ fun CodeFinderScreen(
     onBack: () -> Unit,
     onRemoteImported: (Long) -> Unit
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Smart Scan, 1 = Full Space Scan
 
@@ -111,7 +114,7 @@ fun CodeFinderScreen(
     var scanJob by remember { mutableStateOf<Job?>(null) }
 
     val categories = listOf("All", "TV", "Projector", "Audio", "AC / Climate", "Set-Top Box", "Media Player")
-    val protocols = listOf("NEC", "SONY12", "SONY15", "RC5", "RC6", "JVC")
+    val protocols = listOf("NEC", "SONY12", "SONY15", "RC5", "RC6", "JVC", "PANASONIC", "SHARP")
 
     fun loadSmartCandidates() {
         coroutineScope.launch {
@@ -146,8 +149,15 @@ fun CodeFinderScreen(
 
     fun testCurrentSignal() {
         lastHitSignal?.let { sig ->
+            if (sig.patternMicros.isEmpty()) {
+                Toast.makeText(context, "Protocol '${sig.protocol}' is not yet supported", Toast.LENGTH_SHORT).show()
+                return
+            }
             coroutineScope.launch {
-                container.sendIrSignalUseCase.execute(sig)
+                val result = container.sendIrSignalUseCase.execute(sig)
+                if (!result.isSuccess) {
+                    Toast.makeText(context, result.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -679,7 +689,10 @@ fun CodeFinderScreen(
                             coroutineScope.launch {
                                 val newId = container.remoteRepository.importIrdbRemote(
                                     irdbRemoteId = candidate.remoteId,
-                                    customName = "${candidate.brand} ${candidate.model}"
+                                    customName = "${candidate.brand} ${candidate.model}",
+                                    onUnsupportedProtocol = { unsupportedProtocol ->
+                                        Toast.makeText(context, "Protocol '$unsupportedProtocol' is not yet supported", Toast.LENGTH_SHORT).show()
+                                    }
                                 )
                                 showMatchDialog = false
                                 stopScan()

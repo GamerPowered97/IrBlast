@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.irblast.theme.IrError
 import com.example.irblast.theme.IrSuccess
 import com.example.irblast.theme.IrWarning
 
@@ -42,6 +43,8 @@ fun HardwareStatusBanner(
 ) {
     val statusColor = if (isHardwareAvailable) IrSuccess else IrWarning
     val shape = RoundedCornerShape(14.dp)
+    val blastingColor = if (isHardwareAvailable) IrError else IrWarning
+    val blastingLabel = if (isHardwareAvailable) "TRANSMITTING" else "SIMULATING"
 
     Box(
         modifier = modifier
@@ -51,8 +54,8 @@ fun HardwareStatusBanner(
                 if (isBlasting) {
                     Brush.horizontalGradient(
                         listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                            blastingColor.copy(alpha = 0.25f),
+                            blastingColor.copy(alpha = 0.35f)
                         )
                     )
                 } else {
@@ -66,7 +69,7 @@ fun HardwareStatusBanner(
             )
             .border(
                 width = 1.dp,
-                color = if (isBlasting) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                color = if (isBlasting) blastingColor.copy(alpha = 0.5f)
                 else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
                 shape = shape
             )
@@ -111,16 +114,16 @@ fun HardwareStatusBanner(
                     Box(
                         modifier = Modifier
                             .size(8.dp)
-                            .shadow(4.dp, CircleShape, spotColor = MaterialTheme.colorScheme.primary)
+                            .shadow(4.dp, CircleShape, spotColor = blastingColor)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
+                            .background(blastingColor)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "TRANSMITTING",
+                        text = blastingLabel,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = blastingColor,
                         letterSpacing = 0.5.sp
                     )
                 }

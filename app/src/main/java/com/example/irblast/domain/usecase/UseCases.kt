@@ -25,7 +25,8 @@ sealed class ScanProgressEvent {
         val total: Int,
         val signal: IrSignal,
         val label: String,
-        val candidate: IrdbCandidate? = null
+        val candidate: IrdbCandidate? = null,
+        val transmitResult: TransmitResult? = null
     ) : ScanProgressEvent()
 
     object Complete : ScanProgressEvent()
@@ -50,17 +51,30 @@ class ScanCodeFinderUseCase(
                 candidate.function
             )
             if (signal != null) {
-                sendIrSignalUseCase.execute(signal)
+                val result = sendIrSignalUseCase.execute(signal)
                 emit(
                     ScanProgressEvent.Progress(
                         index = i + 1,
                         total = total,
                         signal = signal,
                         label = "${candidate.brand} ${candidate.model} [${candidate.functionName}]",
-                        candidate = candidate
+                        candidate = candidate,
+                        transmitResult = result
                     )
                 )
                 delay(delayMs)
+            } else {
+                emit(
+                    ScanProgressEvent.Progress(
+                        index = i + 1,
+                        total = total,
+                        signal = IrSignal(38000, intArrayOf(), candidate.protocol),
+                        label = "${candidate.brand} ${candidate.model} [Unsupported: ${candidate.protocol}]",
+                        candidate = candidate,
+                        transmitResult = TransmitResult(isSuccess = false, errorMessage = "Protocol '${candidate.protocol}' is not yet supported")
+                    )
+                )
+                delay(minOf(delayMs, 100L))
             }
         }
         emit(ScanProgressEvent.Complete)
@@ -83,17 +97,30 @@ class ScanCodeFinderUseCase(
                 function = functionCode
             )
             if (signal != null) {
-                sendIrSignalUseCase.execute(signal)
+                val result = sendIrSignalUseCase.execute(signal)
                 emit(
                     ScanProgressEvent.Progress(
                         index = addr + 1,
                         total = total,
                         signal = signal,
                         label = "$protocol Addr: $addr, Cmd: $functionCode",
-                        candidate = null
+                        candidate = null,
+                        transmitResult = result
                     )
                 )
                 delay(delayMs)
+            } else {
+                emit(
+                    ScanProgressEvent.Progress(
+                        index = addr + 1,
+                        total = total,
+                        signal = IrSignal(38000, intArrayOf(), protocol),
+                        label = "$protocol Addr: $addr [Unsupported: $protocol]",
+                        candidate = null,
+                        transmitResult = TransmitResult(isSuccess = false, errorMessage = "Protocol '$protocol' is not yet supported")
+                    )
+                )
+                delay(minOf(delayMs, 100L))
             }
         }
         emit(ScanProgressEvent.Complete)

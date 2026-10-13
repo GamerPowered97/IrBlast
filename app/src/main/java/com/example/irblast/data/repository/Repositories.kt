@@ -86,21 +86,25 @@ class RemoteRepository(
     }
 
     suspend fun saveButton(button: SavedButton): Long = withContext(Dispatchers.IO) {
-        if (button.id == 0L) {
+        val id = if (button.id == 0L) {
             userDb.insertButton(button)
         } else {
             userDb.updateButton(button)
             button.id
         }
+        refreshRemotes()
+        id
     }
 
     suspend fun deleteButton(buttonId: Long) = withContext(Dispatchers.IO) {
         userDb.deleteButton(buttonId)
+        refreshRemotes()
     }
 
     suspend fun importIrdbRemote(
         irdbRemoteId: Long,
-        customName: String? = null
+        customName: String? = null,
+        onUnsupportedProtocol: ((String) -> Unit)? = null
     ): Long = withContext(Dispatchers.IO) {
         val codes = irdbDb.getCodesForRemote(irdbRemoteId)
         // Find remote info from database
@@ -137,6 +141,8 @@ class RemoteRepository(
             )
         )
 
+        val unsupportedProtocols = mutableSetOf<String>()
+
         codes.forEachIndexed { index, code ->
             val signal = ProtocolEncoder.encode(code.protocol, code.device, code.subdevice, code.function)
             if (signal != null) {
@@ -157,6 +163,16 @@ class RemoteRepository(
                             code.functionName.contains("ENTER", ignoreCase = true)) 2 else 1
                     )
                 )
+            } else {
+                unsupportedProtocols.add(code.protocol)
+            }
+        }
+
+        if (unsupportedProtocols.isNotEmpty()) {
+            withContext(Dispatchers.Main) {
+                unsupportedProtocols.forEach { proto ->
+                    onUnsupportedProtocol?.invoke(proto)
+                }
             }
         }
 
@@ -164,30 +180,35 @@ class RemoteRepository(
         remoteId
     }
 
-    private fun mapFunctionToIcon(fn: String): String {
-        val u = fn.uppercase()
-        return when {
-            "POWER" in u || "STANDBY" in u -> "power"
-            "MUTE" in u -> "mute"
-            "VOL" in u && "+" in u -> "vol_up"
-            "VOL" in u && "-" in u -> "vol_down"
-            "CH" in u && "+" in u -> "ch_up"
-            "CH" in u && "-" in u -> "ch_down"
-            "UP" in u -> "up"
-            "DOWN" in u -> "down"
-            "LEFT" in u -> "left"
-            "RIGHT" in u -> "right"
-            "OK" in u || "ENTER" in u || "SELECT" in u -> "ok"
-            "MENU" in u -> "menu"
-            "BACK" in u || "RETURN" in u || "EXIT" in u -> "back"
-            "HOME" in u -> "home"
-            "SOURCE" in u || "INPUT" in u -> "input"
-            "PLAY" in u -> "play"
-            "PAUSE" in u -> "pause"
-            "STOP" in u -> "stop"
-            else -> ""
-        }
-    }
-
     private data class Tuple4(val a: String, val b: String, val c: String, val d: String)
 }
+
+fun mapFunctionToIcon(fn: String): String {
+    val u = fn.uppercase()
+    return when {
+        "POWER" in u || "STANDBY" in u -> "power"
+        "MUTE" in u -> "mute"
+        ("VOL" in u && "+" in u) || ("VOLUME" in u && "+" in u) -> "vol_up"
+        ("VOL" in u && "-" in u) || ("VOLUME" in u && "-" in u) -> "vol_down"
+        ("CH" in u && "+" in u) || ("CHANNEL" in u && "+" in u) -> "ch_up"
+        ("CH" in u && "-" in u) || ("CHANNEL" in u && "-" in u) -> "ch_down"
+        "TEMP" in u && "+" in u -> "up"
+        "TEMP" in u && "-" in u -> "down"
+        "SPEED" in u && "+" in u -> "up"
+        "SPEED" in u && "-" in u -> "down"
+        u == "UP" -> "up"
+        u == "DOWN" -> "down"
+        u == "LEFT" -> "left"
+        u == "RIGHT" -> "right"
+        "OK" in u || "ENTER" in u || "SELECT" in u -> "ok"
+        "MENU" in u || "MODE" in u -> "menu"
+        "BACK" in u || "RETURN" in u || "EXIT" in u -> "back"
+        "HOME" in u -> "home"
+        "SOURCE" in u || "INPUT" in u || "HDMI" in u || "AUX" in u || "FAN" in u || "KEYSTONE" in u -> "input"
+        "PLAY" in u -> "play"
+        "PAUSE" in u -> "pause"
+        "STOP" in u -> "stop"
+        else -> ""
+    }
+}
+

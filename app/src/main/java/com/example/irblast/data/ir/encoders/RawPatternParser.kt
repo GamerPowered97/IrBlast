@@ -20,9 +20,15 @@ object RawPatternParser {
             require(t > 0) { "Pulse timing must be a positive integer, found: $t" }
         }
 
+        val safeTimings = if (timings.size % 2 != 0) {
+            timings + 20000
+        } else {
+            timings
+        }
+
         IrSignal(
             frequencyHz = if (frequencyHz in 10000..100000) frequencyHz else 38000,
-            patternMicros = timings.toIntArray(),
+            patternMicros = safeTimings.toIntArray(),
             protocol = "RAW"
         )
     }

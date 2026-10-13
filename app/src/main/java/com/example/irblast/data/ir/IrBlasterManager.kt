@@ -52,6 +52,13 @@ class IrBlasterManager(private val context: Context) {
             return TransmitResult(false, errorMessage = "Pattern contains non-positive pulse durations")
         }
 
+        // Hardware HALs require an even number of elements (alternating on/off). Pad trailing space if odd.
+        val safePattern = if (patternMicros.size % 2 != 0) {
+            patternMicros + 20000
+        } else {
+            patternMicros
+        }
+
         val manager = irManager
         val hasHardware = try {
             manager != null && manager.hasIrEmitter()
@@ -61,8 +68,28 @@ class IrBlasterManager(private val context: Context) {
 
         return if (hasHardware && manager != null) {
             try {
-                manager.transmit(frequencyHz, patternMicros)
-                Log.d(tag, "Transmitted IR signal: ${frequencyHz}Hz, ${patternMicros.size} pulses")
+                val supportedRanges = supportedFrequencyRanges
+                val clampedFrequency = if (supportedRanges.isNotEmpty()) {
+                    if (supportedRanges.any { frequencyHz in it.first..it.second }) {
+                        frequencyHz
+                    } else {
+                        val closestRange = supportedRanges.minByOrNull { range ->
+                            if (frequencyHz < range.first) range.first - frequencyHz
+                            else if (frequencyHz > range.second) frequencyHz - range.second
+                            else 0
+                        }
+                        if (closestRange != null) {
+                            frequencyHz.coerceIn(closestRange.first, closestRange.second)
+                        } else {
+                            frequencyHz
+                        }
+                    }
+                } else {
+                    frequencyHz
+                }
+
+                manager.transmit(clampedFrequency, safePattern)
+                Log.d(tag, "Transmitted IR signal: ${clampedFrequency}Hz, ${safePattern.size} pulses")
                 TransmitResult(isSuccess = true, isSimulated = false)
             } catch (e: Exception) {
                 Log.e(tag, "Error during IR transmission", e)
@@ -70,8 +97,8 @@ class IrBlasterManager(private val context: Context) {
             }
         } else {
             // Emulated / fallback mode for development or devices without IR emitter
-            Log.i(tag, "Simulated IR signal: ${frequencyHz}Hz, ${patternMicros.size} pulses (no hardware IR emitter detected)")
-            TransmitResult(isSuccess = true, isSimulated = true)
+            Log.i(tag, "Simulated IR signal: ${frequencyHz}Hz, ${safePattern.size} pulses (no hardware IR emitter detected)")
+            TransmitResult(isSuccess = false, isSimulated = true, errorMessage = "No physical IR emitter detected")
         }
     }
 }

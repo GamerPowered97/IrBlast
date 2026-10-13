@@ -10,9 +10,34 @@ object JvcEncoder {
     private const val ZERO_SPACE = 526
     private const val ONE_SPACE = 1578
     private const val STOP_MARK = 526
+    private const val TRAILING_SPACE = 50000
 
-    fun encode(device: Int, function: Int): IrSignal {
-        val pattern = ArrayList<Int>(35)
+    fun encode(device: Int, function: Int, repeats: Int = 1): IrSignal {
+        val singleFrame = encodeSingleFrame(device, function)
+        if (repeats <= 1) {
+            return IrSignal(
+                frequencyHz = FREQUENCY_HZ,
+                patternMicros = singleFrame,
+                protocol = "JVC"
+            )
+        }
+
+        val fullPattern = ArrayList<Int>(singleFrame.size * repeats)
+        for (r in 0 until repeats) {
+            for (pulse in singleFrame) {
+                fullPattern.add(pulse)
+            }
+        }
+
+        return IrSignal(
+            frequencyHz = FREQUENCY_HZ,
+            patternMicros = fullPattern.toIntArray(),
+            protocol = "JVC"
+        )
+    }
+
+    private fun encodeSingleFrame(device: Int, function: Int): IntArray {
+        val pattern = ArrayList<Int>(36)
 
         pattern.add(LEADER_MARK)
         pattern.add(LEADER_SPACE)
@@ -34,11 +59,8 @@ object JvcEncoder {
         }
 
         pattern.add(STOP_MARK)
+        pattern.add(TRAILING_SPACE)
 
-        return IrSignal(
-            frequencyHz = FREQUENCY_HZ,
-            patternMicros = pattern.toIntArray(),
-            protocol = "JVC"
-        )
+        return pattern.toIntArray()
     }
 }

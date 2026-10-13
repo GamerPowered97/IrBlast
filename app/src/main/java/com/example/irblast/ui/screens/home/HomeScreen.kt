@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -57,7 +59,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.FilterChip
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation3.runtime.NavKey
+import com.example.irblast.data.ir.encoders.NecEncoder
+import com.example.irblast.data.ir.encoders.ProtocolEncoder
+import com.example.irblast.data.repository.mapFunctionToIcon
+import com.example.irblast.domain.model.IrdbRemote
+import com.example.irblast.domain.model.SavedButton
 import com.example.irblast.Browse
 import com.example.irblast.CodeFinder
 import com.example.irblast.CustomSignal
@@ -76,6 +94,7 @@ fun HomeScreen(
     container: IrBlastAppContainer,
     onNavigate: (NavKey) -> Unit
 ) {
+    val context = LocalContext.current
     val remotes by container.remoteRepository.remotesFlow.collectAsState(initial = emptyList())
     val coroutineScope = rememberCoroutineScope()
     var isBlasting by remember { mutableStateOf(false) }
@@ -237,10 +256,13 @@ fun HomeScreen(
                                         ?: buttons.firstOrNull()
                                     if (powerBtn != null) {
                                         isBlasting = true
-                                        container.sendIrSignalUseCase.execute(
+                                        val result = container.sendIrSignalUseCase.execute(
                                             powerBtn.frequencyHz,
                                             powerBtn.toPatternIntArray()
                                         )
+                                        if (!result.isSuccess) {
+                                            Toast.makeText(context, result.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
+                                        }
                                         delay(300)
                                         isBlasting = false
                                     }
@@ -256,8 +278,9 @@ fun HomeScreen(
     // Create New Remote Dialog
     if (showCreateDialog) {
         CreateRemoteDialog(
+            container = container,
             onDismiss = { showCreateDialog = false },
-            onConfirm = { name, brand, devType, cat, icon ->
+            onConfirm = { name, brand, devType, cat, icon, buttons ->
                 coroutineScope.launch {
                     val newId = container.remoteRepository.saveRemote(
                         SavedRemote(
@@ -266,7 +289,8 @@ fun HomeScreen(
                             deviceType = devType,
                             category = cat,
                             icon = icon
-                        )
+                        ),
+                        buttons = buttons
                     )
                     showCreateDialog = false
                     onNavigate(RemoteControl(newId))
@@ -438,70 +462,357 @@ private fun RemoteCard(
     }
 }
 
+private data class ApplianceOption(val label: String, val category: String, val emoji: String)
+
+private fun generateTemplateButtons(category: String, brand: String): List<SavedButton> {
+    val templateSpecs = when (category) {
+        "AC / Climate" -> listOf(
+            Triple("POWER", "power", 2),
+            Triple("TEMP +", "up", 1),
+            Triple("TEMP -", "down", 1),
+            Triple("MODE", "menu", 1),
+            Triple("FAN SPEED", "input", 1)
+        )
+        "Projector" -> listOf(
+            Triple("POWER", "power", 2),
+            Triple("HDMI", "input", 1),
+            Triple("MENU", "menu", 1),
+            Triple("KEYSTONE", "input", 1),
+            Triple("UP", "up", 1),
+            Triple("DOWN", "down", 1),
+            Triple("LEFT", "left", 1),
+            Triple("RIGHT", "right", 1),
+            Triple("OK", "ok", 2)
+        )
+        "Audio" -> listOf(
+            Triple("POWER", "power", 2),
+            Triple("VOL +", "vol_up", 1),
+            Triple("VOL -", "vol_down", 1),
+            Triple("MUTE", "mute", 1),
+            Triple("AUX", "input", 1),
+            Triple("OPTICAL", "input", 1),
+            Triple("BLUETOOTH", "input", 1)
+        )
+        "Fan" -> listOf(
+            Triple("POWER", "power", 2),
+            Triple("SPEED +", "up", 1),
+            Triple("SPEED -", "down", 1),
+            Triple("OSCILLATION", "menu", 1),
+            Triple("TIMER", "input", 1)
+        )
+        "Set-Top Box" -> listOf(
+            Triple("POWER", "power", 2),
+            Triple("VOL +", "vol_up", 1),
+            Triple("VOL -", "vol_down", 1),
+            Triple("CH +", "ch_up", 1),
+            Triple("CH -", "ch_down", 1),
+            Triple("GUIDE", "menu", 1),
+            Triple("MENU", "menu", 1),
+            Triple("BACK", "back", 1),
+            Triple("UP", "up", 1),
+            Triple("DOWN", "down", 1),
+            Triple("LEFT", "left", 1),
+            Triple("RIGHT", "right", 1),
+            Triple("OK", "ok", 2),
+            Triple("1", "", 1), Triple("2", "", 1), Triple("3", "", 1),
+            Triple("4", "", 1), Triple("5", "", 1), Triple("6", "", 1),
+            Triple("7", "", 1), Triple("8", "", 1), Triple("9", "", 1),
+            Triple("0", "", 1)
+        )
+        "Media Player" -> listOf(
+            Triple("POWER", "power", 2),
+            Triple("PLAY", "play", 1),
+            Triple("PAUSE", "pause", 1),
+            Triple("STOP", "stop", 1),
+            Triple("PREV", "left", 1),
+            Triple("NEXT", "right", 1),
+            Triple("MENU", "menu", 1),
+            Triple("UP", "up", 1),
+            Triple("DOWN", "down", 1),
+            Triple("LEFT", "left", 1),
+            Triple("RIGHT", "right", 1),
+            Triple("OK", "ok", 2)
+        )
+        else -> listOf(
+            Triple("POWER", "power", 2),
+            Triple("MUTE", "mute", 1),
+            Triple("INPUT", "input", 1),
+            Triple("VOL +", "vol_up", 1),
+            Triple("VOL -", "vol_down", 1),
+            Triple("CH +", "ch_up", 1),
+            Triple("CH -", "ch_down", 1),
+            Triple("MENU", "menu", 1),
+            Triple("HOME", "home", 1),
+            Triple("UP", "up", 1),
+            Triple("DOWN", "down", 1),
+            Triple("LEFT", "left", 1),
+            Triple("RIGHT", "right", 1),
+            Triple("OK", "ok", 2),
+            Triple("1", "", 1), Triple("2", "", 1), Triple("3", "", 1),
+            Triple("4", "", 1), Triple("5", "", 1), Triple("6", "", 1),
+            Triple("7", "", 1), Triple("8", "", 1), Triple("9", "", 1),
+            Triple("0", "", 1)
+        )
+    }
+
+    return templateSpecs.mapIndexed { idx, (label, icon, colSpan) ->
+        val signal = NecEncoder.encode(device = 1, subDevice = -1, function = idx + 1)
+        SavedButton(
+            remoteId = 0L,
+            label = label,
+            icon = icon,
+            frequencyHz = signal.frequencyHz,
+            patternMicros = signal.patternMicros.joinToString(","),
+            protocol = "NEC",
+            sortOrder = idx,
+            colSpan = colSpan
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreateRemoteDialog(
+    container: IrBlastAppContainer,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, brand: String, devType: String, cat: String, icon: String) -> Unit
+    onConfirm: (name: String, brand: String, devType: String, cat: String, icon: String, buttons: List<SavedButton>) -> Unit
 ) {
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var brand by remember { mutableStateOf("") }
-    var devType by remember { mutableStateOf("TV") }
+    var selectedCategory by remember { mutableStateOf("TV") }
     var selectedEmoji by remember { mutableStateOf("📺") }
 
-    val emojis = listOf("📺", "📽️", "🔊", "❄️", "📦", "💿", "💡", "🎮")
+    val applianceOptions = listOf(
+        ApplianceOption("TV", "TV", "📺"),
+        ApplianceOption("AC / Climate", "AC / Climate", "❄️"),
+        ApplianceOption("Projector", "Projector", "📽️"),
+        ApplianceOption("Audio", "Audio", "🔊"),
+        ApplianceOption("Fan", "Fan", "🌀"),
+        ApplianceOption("Set-Top Box", "Set-Top Box", "📦"),
+        ApplianceOption("Media Player", "Media Player", "💿")
+    )
+
+    var brandSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+    var matchingDbRemotes by remember { mutableStateOf<List<IrdbRemote>>(emptyList()) }
+    var selectedModelIndex by remember { mutableIntStateOf(0) }
+    var linkDbCodes by remember { mutableStateOf(true) }
+    var brandDropdownExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(brand, selectedCategory) {
+        val trimmed = brand.trim()
+        if (trimmed.isNotEmpty()) {
+            val catSuggestions = container.irdbRepository.getBrands(
+                category = selectedCategory,
+                query = trimmed
+            )
+            brandSuggestions = if (catSuggestions.isNotEmpty()) {
+                catSuggestions.take(8)
+            } else {
+                container.irdbRepository.getBrands(
+                    category = null,
+                    query = trimmed
+                ).take(8)
+            }
+
+            var remotes = container.irdbRepository.getRemotes(
+                brand = trimmed,
+                category = selectedCategory
+            )
+            if (remotes.isEmpty()) {
+                remotes = container.irdbRepository.getRemotes(
+                    brand = trimmed,
+                    category = null
+                )
+            }
+            matchingDbRemotes = remotes
+            selectedModelIndex = 0
+        } else {
+            brandSuggestions = emptyList()
+            matchingDbRemotes = emptyList()
+            selectedModelIndex = 0
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Create Custom Remote") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Remote Name") },
-                    placeholder = { Text("e.g. Bedroom Projector") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = brand,
-                    onValueChange = { brand = it },
-                    label = { Text("Brand") },
-                    placeholder = { Text("e.g. Epson") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(text = "Choose Icon", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Row(
+                    placeholder = { Text("e.g. Living Room TV") },
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Text(text = "Appliance Type", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    emojis.forEach { emoji ->
-                        Box(
+                    applianceOptions.forEach { opt ->
+                        FilterChip(
+                            selected = selectedCategory == opt.category,
+                            onClick = {
+                                selectedCategory = opt.category
+                                selectedEmoji = opt.emoji
+                            },
+                            label = { Text("${opt.emoji} ${opt.label}", fontSize = 12.sp) }
+                        )
+                    }
+                }
+
+                // Brand with Auto-Suggest Dropdown
+                Column {
+                    ExposedDropdownMenuBox(
+                        expanded = brandDropdownExpanded && brandSuggestions.isNotEmpty(),
+                        onExpandedChange = { brandDropdownExpanded = it },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = brand,
+                            onValueChange = {
+                                brand = it
+                                brandDropdownExpanded = true
+                            },
+                            label = { Text("Brand") },
+                            placeholder = { Text("e.g. Sony, Epson, Daikin...") },
                             modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (selectedEmoji == emoji) MaterialTheme.colorScheme.primaryContainer
-                                    else Color.Transparent
+                                .fillMaxWidth()
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                            shape = RoundedCornerShape(12.dp),
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = brandDropdownExpanded && brandSuggestions.isNotEmpty()
                                 )
-                                .clickable {
-                                    selectedEmoji = emoji
-                                    devType = when (emoji) {
-                                        "📺" -> "TV"
-                                        "📽️" -> "Projector"
-                                        "🔊" -> "Audio"
-                                        "❄️" -> "Air Conditioner"
-                                        "📦" -> "Set-Top Box"
-                                        "💿" -> "DVD / Blu-ray"
-                                        else -> "Device"
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
+                            }
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = brandDropdownExpanded && brandSuggestions.isNotEmpty(),
+                            onDismissRequest = { brandDropdownExpanded = false }
                         ) {
-                            Text(text = emoji, fontSize = 20.sp)
+                            brandSuggestions.forEach { suggestedBrand ->
+                                DropdownMenuItem(
+                                    text = { Text(suggestedBrand, fontSize = 13.sp) },
+                                    onClick = {
+                                        brand = suggestedBrand
+                                        brandDropdownExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
+
+                    if (brandSuggestions.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            brandSuggestions.forEach { suggestedBrand ->
+                                Card(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            brand = suggestedBrand
+                                            brandDropdownExpanded = false
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    ),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = suggestedBrand,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (matchingDbRemotes.isNotEmpty()) {
+                    val activeModel = matchingDbRemotes.getOrNull(selectedModelIndex) ?: matchingDbRemotes.first()
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = linkDbCodes,
+                                    onCheckedChange = { linkDbCodes = it }
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Column {
+                                    Text(
+                                        text = "Link Database Codes (${activeModel.model})",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        text = "Prefill verified IR codes from irdb.db for $brand",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            if (matchingDbRemotes.size > 1 && linkDbCodes) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Available Models (${matchingDbRemotes.size}):",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    matchingDbRemotes.forEachIndexed { idx, rem ->
+                                        FilterChip(
+                                            selected = selectedModelIndex == idx,
+                                            onClick = { selectedModelIndex = idx },
+                                            label = { Text(rem.model, fontSize = 11.sp) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Template buttons will be generated automatically for $selectedCategory.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         },
@@ -509,13 +820,50 @@ private fun CreateRemoteDialog(
             TextButton(
                 enabled = name.isNotBlank(),
                 onClick = {
-                    onConfirm(
-                        name.trim(),
-                        brand.ifBlank { "Custom" }.trim(),
-                        devType,
-                        devType,
-                        selectedEmoji
-                    )
+                    coroutineScope.launch {
+                        val buttons = if (matchingDbRemotes.isNotEmpty() && linkDbCodes) {
+                            val targetRemote = matchingDbRemotes.getOrNull(selectedModelIndex) ?: matchingDbRemotes.first()
+                            val codes = container.irdbRepository.getCodesForRemote(targetRemote.id)
+                            val unsupportedProtocols = mutableSetOf<String>()
+                            val realButtons = codes.mapNotNull { code ->
+                                val signal = ProtocolEncoder.encode(code.protocol, code.device, code.subdevice, code.function)
+                                if (signal != null) {
+                                    SavedButton(
+                                        remoteId = 0L,
+                                        label = code.functionName,
+                                        icon = mapFunctionToIcon(code.functionName),
+                                        frequencyHz = signal.frequencyHz,
+                                        patternMicros = signal.patternMicros.joinToString(","),
+                                        protocol = code.protocol,
+                                        device = code.device,
+                                        subdevice = code.subdevice,
+                                        functionCode = code.function,
+                                        colSpan = if (code.functionName.contains("POWER", ignoreCase = true) ||
+                                            code.functionName.contains("OK", ignoreCase = true) ||
+                                            code.functionName.contains("ENTER", ignoreCase = true)) 2 else 1
+                                    )
+                                } else {
+                                    unsupportedProtocols.add(code.protocol)
+                                    null
+                                }
+                            }
+                            if (unsupportedProtocols.isNotEmpty()) {
+                                Toast.makeText(context, "Note: Protocols not yet supported: ${unsupportedProtocols.joinToString()}", Toast.LENGTH_SHORT).show()
+                            }
+                            if (realButtons.isNotEmpty()) realButtons else generateTemplateButtons(selectedCategory, brand)
+                        } else {
+                            generateTemplateButtons(selectedCategory, brand)
+                        }
+
+                        onConfirm(
+                            name.trim(),
+                            brand.ifBlank { "Custom" }.trim(),
+                            selectedCategory,
+                            selectedCategory,
+                            selectedEmoji,
+                            buttons
+                        )
+                    }
                 }
             ) {
                 Text("Create")

@@ -5,8 +5,31 @@ import com.example.irblast.domain.model.IrSignal
 object Rc5Encoder {
     private const val FREQUENCY_HZ = 36000
     private const val HALF_BIT_US = 889
+    private const val INTER_FRAME_GAP_US = 88000
 
-    fun encode(device: Int, function: Int, toggle: Boolean = false): IrSignal {
+    fun encode(device: Int, function: Int, toggle: Boolean = false, repeats: Int = 1): IrSignal {
+        if (repeats <= 1) {
+            val singleFrame = encodeSingleFrame(device, function, toggle, isLastFrame = true)
+            return IrSignal(FREQUENCY_HZ, singleFrame, "RC5")
+        }
+
+        val fullPattern = ArrayList<Int>()
+        for (r in 0 until repeats) {
+            val isLast = (r == repeats - 1)
+            val frame = encodeSingleFrame(device, function, toggle, isLastFrame = isLast)
+            for (p in frame) {
+                fullPattern.add(p)
+            }
+        }
+
+        return IrSignal(
+            frequencyHz = FREQUENCY_HZ,
+            patternMicros = fullPattern.toIntArray(),
+            protocol = "RC5"
+        )
+    }
+
+    private fun encodeSingleFrame(device: Int, function: Int, toggle: Boolean, isLastFrame: Boolean): IntArray {
         // RC5 bits:
         // S1: 1
         // S2 (Field bit): 1 if function < 64 else 0
@@ -49,7 +72,7 @@ object Rc5Encoder {
         // The signal starts at the first MARK (true)
         val firstMarkIndex = halfBits.indexOfFirst { it }
         if (firstMarkIndex == -1) {
-            return IrSignal(FREQUENCY_HZ, intArrayOf(), "RC5")
+            return intArrayOf()
         }
 
         val pattern = ArrayList<Int>()
@@ -70,10 +93,13 @@ object Rc5Encoder {
             pattern.add(currentDuration)
         }
 
-        return IrSignal(
-            frequencyHz = FREQUENCY_HZ,
-            patternMicros = pattern.toIntArray(),
-            protocol = "RC5"
-        )
+        // Ensure even array length by appending an inter-message space gap (88,000 µs) if ending on a mark
+        if (pattern.size % 2 != 0) {
+            pattern.add(INTER_FRAME_GAP_US)
+        } else if (!isLastFrame) {
+            pattern[pattern.size - 1] = INTER_FRAME_GAP_US
+        }
+
+        return pattern.toIntArray()
     }
 }

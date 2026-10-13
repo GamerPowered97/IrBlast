@@ -37,7 +37,8 @@ fun MainNavigation() {
                 RemoteScreen(
                     remoteId = key.remoteId,
                     container = container,
-                    onBack = { backStack.removeLastOrNull() }
+                    onBack = { backStack.removeLastOrNull() },
+                    onNavigateToBrowse = { backStack.add(Browse()) }
                 )
             }
             entry<Browse> { key ->

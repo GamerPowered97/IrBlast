@@ -54,6 +54,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import com.example.irblast.IrBlastAppContainer
 import com.example.irblast.data.ir.encoders.ProntoHexParser
 import com.example.irblast.data.ir.encoders.RawPatternParser
@@ -72,8 +82,10 @@ import kotlinx.coroutines.launch
 fun RemoteScreen(
     remoteId: Long,
     container: IrBlastAppContainer,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToBrowse: (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var remote by remember { mutableStateOf<SavedRemote?>(null) }
     var buttons by remember { mutableStateOf<List<SavedButton>>(emptyList()) }
@@ -98,10 +110,13 @@ fun RemoteScreen(
     fun blast(button: SavedButton) {
         coroutineScope.launch {
             isBlasting = true
-            container.sendIrSignalUseCase.execute(
+            val result = container.sendIrSignalUseCase.execute(
                 button.frequencyHz,
                 button.toPatternIntArray()
             )
+            if (!result.isSuccess) {
+                Toast.makeText(context, result.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
+            }
             delay(250)
             isBlasting = false
         }
@@ -202,170 +217,244 @@ fun RemoteScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Power & Top Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (powerBtn != null) {
-                    IrButton(
-                        label = powerBtn.label,
-                        icon = "power",
-                        variant = ButtonStyleVariant.POWER,
-                        hapticsEnabled = hapticsEnabled,
-                        modifier = Modifier.size(64.dp),
-                        shape = CircleShape,
-                        onClick = { blast(powerBtn) }
-                    )
-                }
-
-                if (muteBtn != null) {
-                    IrButton(
-                        label = muteBtn.label,
-                        icon = "mute",
-                        variant = ButtonStyleVariant.CIRCLE,
-                        hapticsEnabled = hapticsEnabled,
-                        modifier = Modifier.size(54.dp),
-                        shape = CircleShape,
-                        onClick = { blast(muteBtn) }
-                    )
-                }
-
-                if (sourceBtn != null) {
-                    IrButton(
-                        label = sourceBtn.label,
-                        icon = "input",
-                        variant = ButtonStyleVariant.CIRCLE,
-                        hapticsEnabled = hapticsEnabled,
-                        modifier = Modifier.size(54.dp),
-                        shape = CircleShape,
-                        onClick = { blast(sourceBtn) }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Volume & Channel Cluster
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Volume Column Rocker
-                Column(
+            if (buttons.isEmpty()) {
+                Card(
                     modifier = Modifier
-                        .width(68.dp)
-                        .clip(RoundedCornerShape(34.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .border(
-                            1.dp,
-                            MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                            RoundedCornerShape(34.dp)
-                        )
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .fillMaxWidth()
+                        .padding(top = 24.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 ) {
-                    volUpBtn?.let {
-                        IrButton(
-                            label = "VOL +",
-                            icon = "vol_up",
-                            variant = ButtonStyleVariant.CIRCLE,
-                            hapticsEnabled = hapticsEnabled,
-                            modifier = Modifier.size(56.dp),
-                            shape = CircleShape,
-                            onClick = { blast(it) }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(text = "📭", fontSize = 48.sp)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "No Buttons Configured",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text("VOL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    volDownBtn?.let {
-                        IrButton(
-                            label = "VOL -",
-                            icon = "vol_down",
-                            variant = ButtonStyleVariant.CIRCLE,
-                            hapticsEnabled = hapticsEnabled,
-                            modifier = Modifier.size(56.dp),
-                            shape = CircleShape,
-                            onClick = { blast(it) }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "This remote doesn't have any IR buttons configured yet. You can import from the database or add custom IR buttons.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
                         )
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (onNavigateToBrowse != null) {
+                                Button(
+                                    onClick = onNavigateToBrowse,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Import from DB", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = { showAddButtonDialog = true },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Add Custom Button", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
+            } else {
+                // Power & Top Row
+                if (powerBtn != null || muteBtn != null || sourceBtn != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (powerBtn != null) {
+                            IrButton(
+                                label = powerBtn.label,
+                                icon = "power",
+                                variant = ButtonStyleVariant.POWER,
+                                hapticsEnabled = hapticsEnabled,
+                                modifier = Modifier.size(64.dp),
+                                shape = CircleShape,
+                                onClick = { blast(powerBtn) }
+                            )
+                        }
 
-                // Middle Quick Navigation (Home / Menu)
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    homeBtn?.let {
-                        IrButton(
-                            label = "HOME",
-                            icon = "home",
-                            variant = ButtonStyleVariant.CIRCLE,
-                            hapticsEnabled = hapticsEnabled,
-                            modifier = Modifier.size(54.dp),
-                            shape = CircleShape,
-                            onClick = { blast(it) }
-                        )
+                        if (muteBtn != null) {
+                            IrButton(
+                                label = muteBtn.label,
+                                icon = "mute",
+                                variant = ButtonStyleVariant.CIRCLE,
+                                hapticsEnabled = hapticsEnabled,
+                                modifier = Modifier.size(54.dp),
+                                shape = CircleShape,
+                                onClick = { blast(muteBtn) }
+                            )
+                        }
+
+                        if (sourceBtn != null) {
+                            IrButton(
+                                label = sourceBtn.label,
+                                icon = "input",
+                                variant = ButtonStyleVariant.CIRCLE,
+                                hapticsEnabled = hapticsEnabled,
+                                modifier = Modifier.size(54.dp),
+                                shape = CircleShape,
+                                onClick = { blast(sourceBtn) }
+                            )
+                        }
                     }
-                    menuBtn?.let {
-                        IrButton(
-                            label = "MENU",
-                            icon = "menu",
-                            variant = ButtonStyleVariant.CIRCLE,
-                            hapticsEnabled = hapticsEnabled,
-                            modifier = Modifier.size(54.dp),
-                            shape = CircleShape,
-                            onClick = { blast(it) }
-                        )
-                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
                 }
 
-                // Channel Column Rocker
-                Column(
-                    modifier = Modifier
-                        .width(68.dp)
-                        .clip(RoundedCornerShape(34.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .border(
-                            1.dp,
-                            MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                            RoundedCornerShape(34.dp)
-                        )
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    chUpBtn?.let {
-                        IrButton(
-                            label = "CH +",
-                            icon = "up",
-                            variant = ButtonStyleVariant.CIRCLE,
-                            hapticsEnabled = hapticsEnabled,
-                            modifier = Modifier.size(56.dp),
-                            shape = CircleShape,
-                            onClick = { blast(it) }
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text("CH", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    chDownBtn?.let {
-                        IrButton(
-                            label = "CH -",
-                            icon = "down",
-                            variant = ButtonStyleVariant.CIRCLE,
-                            hapticsEnabled = hapticsEnabled,
-                            modifier = Modifier.size(56.dp),
-                            shape = CircleShape,
-                            onClick = { blast(it) }
-                        )
-                    }
-                }
-            }
+                // Volume & Channel Cluster
+                val hasVolRockers = volUpBtn != null || volDownBtn != null
+                val hasChRockers = chUpBtn != null || chDownBtn != null
+                val hasMiddleNav = homeBtn != null || menuBtn != null
 
-            Spacer(modifier = Modifier.height(24.dp))
+                if (hasVolRockers || hasChRockers || hasMiddleNav) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Volume Column Rocker
+                        if (hasVolRockers) {
+                            Column(
+                                modifier = Modifier
+                                    .width(68.dp)
+                                    .clip(RoundedCornerShape(34.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                                        RoundedCornerShape(34.dp)
+                                    )
+                                    .padding(vertical = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                volUpBtn?.let {
+                                    IrButton(
+                                        label = "VOL +",
+                                        icon = "vol_up",
+                                        variant = ButtonStyleVariant.CIRCLE,
+                                        hapticsEnabled = hapticsEnabled,
+                                        modifier = Modifier.size(56.dp),
+                                        shape = CircleShape,
+                                        onClick = { blast(it) }
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("VOL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                volDownBtn?.let {
+                                    IrButton(
+                                        label = "VOL -",
+                                        icon = "vol_down",
+                                        variant = ButtonStyleVariant.CIRCLE,
+                                        hapticsEnabled = hapticsEnabled,
+                                        modifier = Modifier.size(56.dp),
+                                        shape = CircleShape,
+                                        onClick = { blast(it) }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Middle Quick Navigation (Home / Menu)
+                        if (hasMiddleNav) {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                homeBtn?.let {
+                                    IrButton(
+                                        label = "HOME",
+                                        icon = "home",
+                                        variant = ButtonStyleVariant.CIRCLE,
+                                        hapticsEnabled = hapticsEnabled,
+                                        modifier = Modifier.size(54.dp),
+                                        shape = CircleShape,
+                                        onClick = { blast(it) }
+                                    )
+                                }
+                                menuBtn?.let {
+                                    IrButton(
+                                        label = "MENU",
+                                        icon = "menu",
+                                        variant = ButtonStyleVariant.CIRCLE,
+                                        hapticsEnabled = hapticsEnabled,
+                                        modifier = Modifier.size(54.dp),
+                                        shape = CircleShape,
+                                        onClick = { blast(it) }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Channel Column Rocker
+                        if (hasChRockers) {
+                            Column(
+                                modifier = Modifier
+                                    .width(68.dp)
+                                    .clip(RoundedCornerShape(34.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                                        RoundedCornerShape(34.dp)
+                                    )
+                                    .padding(vertical = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                chUpBtn?.let {
+                                    IrButton(
+                                        label = "CH +",
+                                        icon = "up",
+                                        variant = ButtonStyleVariant.CIRCLE,
+                                        hapticsEnabled = hapticsEnabled,
+                                        modifier = Modifier.size(56.dp),
+                                        shape = CircleShape,
+                                        onClick = { blast(it) }
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text("CH", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                chDownBtn?.let {
+                                    IrButton(
+                                        label = "CH -",
+                                        icon = "down",
+                                        variant = ButtonStyleVariant.CIRCLE,
+                                        hapticsEnabled = hapticsEnabled,
+                                        modifier = Modifier.size(56.dp),
+                                        shape = CircleShape,
+                                        onClick = { blast(it) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
 
             // D-Pad Section
             if (upBtn != null || downBtn != null || leftBtn != null || rightBtn != null || okBtn != null) {
@@ -466,6 +555,7 @@ fun RemoteScreen(
                         )
                     }
                 }
+            }
             }
 
             Spacer(modifier = Modifier.height(80.dp))

@@ -2,6 +2,7 @@ package com.example.irblast.ui.screens.custom
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +53,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import com.example.irblast.IrBlastAppContainer
 import com.example.irblast.data.ir.encoders.ProntoHexParser
 import com.example.irblast.data.ir.encoders.ProtocolEncoder
@@ -72,6 +75,7 @@ fun CustomSignalScreen(
     onBack: () -> Unit,
     onNavigateToRemote: (Long) -> Unit
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Pronto Hex, 1 = Raw, 2 = Protocol
 
@@ -102,7 +106,10 @@ fun CustomSignalScreen(
     fun blast(signal: IrSignal) {
         coroutineScope.launch {
             isBlasting = true
-            container.sendIrSignalUseCase.execute(signal)
+            val result = container.sendIrSignalUseCase.execute(signal)
+            if (!result.isSuccess) {
+                Toast.makeText(context, result.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
+            }
             delay(250)
             isBlasting = false
         }
@@ -249,10 +256,12 @@ fun CustomSignalScreen(
                     Text(text = "Protocol Architecture:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf("NEC", "SONY12", "SONY15", "RC5", "RC6", "JVC").forEach { p ->
+                        listOf("NEC", "SONY12", "SONY15", "RC5", "RC6", "JVC", "PANASONIC", "SHARP").forEach { p ->
                             FilterChip(
                                 selected = protoType == p,
                                 onClick = {

@@ -7,8 +7,9 @@ object ProtocolEncoder {
         val proto = protocol.trim().uppercase()
         return when {
             proto == "NEC" || proto == "NEC1" || proto == "NEC2" ||
-                    proto == "NECX1" || proto == "NECX2" || proto == "APPLE" || proto == "PIONEER" -> {
-                NecEncoder.encode(device, subDevice, function)
+                    proto == "NECX1" || proto == "NECX2" || proto == "APPLE" || proto == "PIONEER" ||
+                    proto.startsWith("NEC1-") || proto.startsWith("NEC2-") || proto == "48-NEC1" || proto == "48-NEC2" -> {
+                NecEncoder.encode(device, subDevice, function, repeats = 2)
             }
             proto == "SONY12" || proto == "SIRC12" -> {
                 SonyEncoder.encode(12, device, subDevice, function, repeats = 3)
@@ -25,18 +26,24 @@ object ProtocolEncoder {
                 else SonyEncoder.encode(12, device, subDevice, function, repeats = 3)
             }
             proto.startsWith("RC5") -> {
-                Rc5Encoder.encode(device, function)
+                Rc5Encoder.encode(device, function, repeats = 2)
             }
             proto.startsWith("RC6") || proto == "MCE" -> {
-                Rc6Encoder.encode(device, function)
+                Rc6Encoder.encode(device, function, repeats = 2)
             }
-            proto == "JVC" -> {
-                JvcEncoder.encode(device, function)
+            proto.startsWith("JVC") -> {
+                JvcEncoder.encode(device, function, repeats = 2)
+            }
+            proto.startsWith("PANASONIC") || proto == "KASEIKYO" || proto == "DENON-K" || proto == "TEAC-K" || proto.endsWith("-K") -> {
+                PanasonicEncoder.encode(device, subDevice, function, repeats = 2)
+            }
+            proto.startsWith("SHARP") || proto.startsWith("DENON") -> {
+                SharpEncoder.encode(device, function, repeats = 2)
             }
             else -> {
                 // Fallback for generic NEC-derived or unknown
                 if (proto.contains("NEC")) {
-                    NecEncoder.encode(device, subDevice, function)
+                    NecEncoder.encode(device, subDevice, function, repeats = 2)
                 } else {
                     null
                 }

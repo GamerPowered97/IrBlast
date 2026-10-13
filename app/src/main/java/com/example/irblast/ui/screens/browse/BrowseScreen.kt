@@ -59,6 +59,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import com.example.irblast.IrBlastAppContainer
 import com.example.irblast.data.ir.encoders.ProtocolEncoder
 import com.example.irblast.domain.model.IrdbCode
@@ -76,6 +78,7 @@ fun BrowseScreen(
     onBack: () -> Unit,
     onRemoteImported: (Long) -> Unit
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var categories by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedCategory by remember { mutableStateOf(initialCategory.ifBlank { "All" }) }
@@ -361,9 +364,14 @@ fun BrowseScreen(
                                         )
                                         if (signal != null) {
                                             isBlasting = true
-                                            container.sendIrSignalUseCase.execute(signal)
+                                            val result = container.sendIrSignalUseCase.execute(signal)
+                                            if (!result.isSuccess) {
+                                                Toast.makeText(context, result.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
+                                            }
                                             delay(250)
                                             isBlasting = false
+                                        } else {
+                                            Toast.makeText(context, "Protocol '${code.protocol}' is not yet supported", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 }
@@ -376,7 +384,12 @@ fun BrowseScreen(
                 Button(
                     onClick = {
                         coroutineScope.launch {
-                            val newId = container.remoteRepository.importIrdbRemote(rem.id)
+                            val newId = container.remoteRepository.importIrdbRemote(
+                                irdbRemoteId = rem.id,
+                                onUnsupportedProtocol = { unsupportedProtocol ->
+                                    Toast.makeText(context, "Protocol '$unsupportedProtocol' is not yet supported", Toast.LENGTH_SHORT).show()
+                                }
+                            )
                             inspectRemote = null
                             onRemoteImported(newId)
                         }

@@ -82,10 +82,10 @@ class IrdbDatabase(private val context: Context) {
         val args: Array<String>
 
         if (!category.isNullOrBlank()) {
-            sql = "SELECT id, brand, device_type, category, model FROM remotes WHERE brand = ? AND category = ? ORDER BY model ASC"
+            sql = "SELECT id, brand, device_type, category, model FROM remotes WHERE brand = ? COLLATE NOCASE AND category = ? ORDER BY model ASC"
             args = arrayOf(brand, category)
         } else {
-            sql = "SELECT id, brand, device_type, category, model FROM remotes WHERE brand = ? ORDER BY model ASC"
+            sql = "SELECT id, brand, device_type, category, model FROM remotes WHERE brand = ? COLLATE NOCASE ORDER BY model ASC"
             args = arrayOf(brand)
         }
 

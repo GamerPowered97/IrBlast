@@ -7,8 +7,31 @@ object Rc6Encoder {
     private const val T_US = 444
     private const val LEADER_MARK = 2666
     private const val LEADER_SPACE = 889
+    private const val INTER_FRAME_GAP_US = 100000
 
-    fun encode(device: Int, function: Int, toggle: Boolean = false): IrSignal {
+    fun encode(device: Int, function: Int, toggle: Boolean = false, repeats: Int = 1): IrSignal {
+        if (repeats <= 1) {
+            val singleFrame = encodeSingleFrame(device, function, toggle, isLastFrame = true)
+            return IrSignal(FREQUENCY_HZ, singleFrame, "RC6")
+        }
+
+        val fullPattern = ArrayList<Int>()
+        for (r in 0 until repeats) {
+            val isLast = (r == repeats - 1)
+            val frame = encodeSingleFrame(device, function, toggle, isLastFrame = isLast)
+            for (p in frame) {
+                fullPattern.add(p)
+            }
+        }
+
+        return IrSignal(
+            frequencyHz = FREQUENCY_HZ,
+            patternMicros = fullPattern.toIntArray(),
+            protocol = "RC6"
+        )
+    }
+
+    private fun encodeSingleFrame(device: Int, function: Int, toggle: Boolean, isLastFrame: Boolean): IntArray {
         val pattern = ArrayList<Int>()
         pattern.add(LEADER_MARK)
         pattern.add(LEADER_SPACE)
@@ -79,10 +102,13 @@ object Rc6Encoder {
             pattern.add(currentDuration)
         }
 
-        return IrSignal(
-            frequencyHz = FREQUENCY_HZ,
-            patternMicros = pattern.toIntArray(),
-            protocol = "RC6"
-        )
+        // Ensure even array length by appending an inter-message space gap (100,000 µs) if ending on a mark
+        if (pattern.size % 2 != 0) {
+            pattern.add(INTER_FRAME_GAP_US)
+        } else if (!isLastFrame) {
+            pattern[pattern.size - 1] = INTER_FRAME_GAP_US
+        }
+
+        return pattern.toIntArray()
     }
 }
