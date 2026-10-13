@@ -3,6 +3,7 @@ package com.example.irblast.ui.screens.codefinder
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
@@ -34,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -62,12 +65,13 @@ import androidx.compose.ui.unit.sp
 import com.example.irblast.IrBlastAppContainer
 import com.example.irblast.domain.model.IrSignal
 import com.example.irblast.domain.model.IrdbCandidate
+import com.example.irblast.domain.model.SavedButton
+import com.example.irblast.domain.model.SavedRemote
 import com.example.irblast.domain.usecase.ScanProgressEvent
 import com.example.irblast.theme.IrError
 import com.example.irblast.theme.IrSuccess
 import com.example.irblast.ui.components.HardwareStatusBanner
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -130,20 +134,38 @@ fun CodeFinderScreen(
         scanJob = null
         isScanning = false
         isPaused = false
+        scanProgressIndex = 0
     }
 
-    fun startSmartScan() {
+    fun pauseScan() {
+        scanJob?.cancel()
+        scanJob = null
+        isScanning = false
+        isPaused = true
+    }
+
+    fun testCurrentSignal() {
+        lastHitSignal?.let { sig ->
+            coroutineScope.launch {
+                container.sendIrSignalUseCase.execute(sig)
+            }
+        }
+    }
+
+    fun startSmartScan(resume: Boolean = false) {
         if (smartCandidates.isEmpty()) return
-        stopScan()
+        scanJob?.cancel()
         isScanning = true
         isPaused = false
         scanTotal = smartCandidates.size
-        scanProgressIndex = 0
+        val startIdx = if (resume) maxOf(0, scanProgressIndex - 1) else 0
+        if (!resume) scanProgressIndex = 0
 
         scanJob = coroutineScope.launch {
             container.scanCodeFinderUseCase.scanCandidates(
                 candidates = smartCandidates,
-                delayMs = scanDelayMs.toLong()
+                delayMs = scanDelayMs.toLong(),
+                startIndex = startIdx
             ).collect { event ->
                 when (event) {
                     is ScanProgressEvent.Progress -> {
@@ -154,33 +176,38 @@ fun CodeFinderScreen(
                     }
                     is ScanProgressEvent.Complete -> {
                         isScanning = false
+                        isPaused = false
                     }
                 }
             }
         }
     }
 
-    fun startGeneralScan() {
-        stopScan()
+    fun startGeneralScan(resume: Boolean = false) {
+        scanJob?.cancel()
         isScanning = true
         isPaused = false
         scanTotal = 256
-        scanProgressIndex = 0
+        val startAddr = if (resume) maxOf(0, scanProgressIndex - 1) else 0
+        if (!resume) scanProgressIndex = 0
 
         scanJob = coroutineScope.launch {
             container.scanCodeFinderUseCase.scanGeneral(
                 protocol = generalProtocol,
                 functionCode = generalFunctionCode,
-                delayMs = scanDelayMs.toLong()
+                delayMs = scanDelayMs.toLong(),
+                startAddress = startAddr
             ).collect { event ->
                 when (event) {
                     is ScanProgressEvent.Progress -> {
                         scanProgressIndex = event.index
                         currentSignalLabel = event.label
+                        lastHitCandidate = null
                         lastHitSignal = event.signal
                     }
                     is ScanProgressEvent.Complete -> {
                         isScanning = false
+                        isPaused = false
                     }
                 }
             }
@@ -259,13 +286,18 @@ fun CodeFinderScreen(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    categories.take(4).forEach { cat ->
+                    categories.forEach { cat ->
                         FilterChip(
                             selected = smartCategory == cat,
-                            onClick = { smartCategory = cat },
+                            onClick = {
+                                stopScan()
+                                smartCategory = cat
+                            },
                             label = { Text(cat, fontSize = 11.sp) }
                         )
                     }
@@ -275,7 +307,10 @@ fun CodeFinderScreen(
 
                 OutlinedTextField(
                     value = smartBrand,
-                    onValueChange = { smartBrand = it },
+                    onValueChange = {
+                        stopScan()
+                        smartBrand = it
+                    },
                     label = { Text("Brand Filter (Optional)") },
                     placeholder = { Text("e.g. Epson, Samsung, BenQ...") },
                     modifier = Modifier.fillMaxWidth(),
@@ -298,7 +333,10 @@ fun CodeFinderScreen(
                     listOf("POWER", "MUTE", "VOL+", "INPUT").forEach { fn ->
                         FilterChip(
                             selected = smartFunction == fn,
-                            onClick = { smartFunction = fn },
+                            onClick = {
+                                stopScan()
+                                smartFunction = fn
+                            },
                             label = { Text(fn, fontSize = 12.sp) }
                         )
                     }
@@ -322,13 +360,18 @@ fun CodeFinderScreen(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     protocols.forEach { proto ->
                         FilterChip(
                             selected = generalProtocol == proto,
-                            onClick = { generalProtocol = proto },
+                            onClick = {
+                                stopScan()
+                                generalProtocol = proto
+                            },
                             label = { Text(proto, fontSize = 11.sp) }
                         )
                     }
@@ -338,7 +381,10 @@ fun CodeFinderScreen(
 
                 OutlinedTextField(
                     value = generalFunctionCode.toString(),
-                    onValueChange = { generalFunctionCode = it.toIntOrNull() ?: 2 },
+                    onValueChange = {
+                        stopScan()
+                        generalFunctionCode = it.toIntOrNull() ?: 2
+                    },
                     label = { Text("Function Command Code") },
                     placeholder = { Text("2 (Standard Power), 15 (Mute)...") },
                     modifier = Modifier.fillMaxWidth(),
@@ -389,10 +435,18 @@ fun CodeFinderScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = if (isScanning) "SCANNING IN PROGRESS..." else "SCAN STATUS: READY",
+                            text = when {
+                                isScanning -> "SCANNING IN PROGRESS..."
+                                isPaused -> "SCAN PAUSED (READY TO RESUME)"
+                                else -> "SCAN STATUS: READY"
+                            },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isScanning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = when {
+                                isScanning -> MaterialTheme.colorScheme.primary
+                                isPaused -> MaterialTheme.colorScheme.tertiary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
                         )
                         Text(
                             text = "$scanProgressIndex / $scanTotal",
@@ -415,13 +469,13 @@ fun CodeFinderScreen(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
-                        text = if (currentSignalLabel.isNotBlank()) "Pulsing: $currentSignalLabel" else "Waiting for start...",
+                        text = if (currentSignalLabel.isNotBlank()) "Signal: $currentSignalLabel" else "Waiting for start...",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    if (isScanning && scanTotal > 0) {
+                    if ((isScanning || isPaused) && scanTotal > 0) {
                         val remainingMs = (scanTotal - scanProgressIndex) * scanDelayMs.toLong()
                         val sec = (remainingMs / 1000) % 60
                         val min = (remainingMs / 1000) / 60
@@ -437,10 +491,10 @@ fun CodeFinderScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             // Scan Trigger Buttons
-            if (!isScanning) {
+            if (!isScanning && !isPaused) {
                 Button(
                     onClick = {
-                        if (selectedTab == 0) startSmartScan() else startGeneralScan()
+                        if (selectedTab == 0) startSmartScan(resume = false) else startGeneralScan(resume = false)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -456,11 +510,11 @@ fun CodeFinderScreen(
                         fontSize = 15.sp
                     )
                 }
-            } else {
+            } else if (isScanning) {
                 // When scanning: Big Device Responded button!
                 Button(
                     onClick = {
-                        stopScan()
+                        pauseScan()
                         showMatchDialog = true
                     },
                     modifier = Modifier
@@ -484,6 +538,19 @@ fun CodeFinderScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Button(
+                        onClick = { pauseScan() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                    ) {
+                        Icon(imageVector = Icons.Default.Pause, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Pause")
+                    }
+
+                    Button(
                         onClick = { stopScan() },
                         modifier = Modifier
                             .weight(1f)
@@ -495,6 +562,74 @@ fun CodeFinderScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Cancel")
                     }
+                }
+            } else {
+                // When PAUSED
+                Button(
+                    onClick = {
+                        showMatchDialog = true
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = IrSuccess)
+                ) {
+                    Text(
+                        text = "🎯 DEVICE RESPONDED! SAVE",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 16.sp,
+                        color = Color.White
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            if (selectedTab == 0) startSmartScan(resume = true) else startGeneralScan(resume = true)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Resume")
+                    }
+
+                    Button(
+                        onClick = { testCurrentSignal() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Icon(imageVector = Icons.Default.ElectricBolt, contentDescription = null)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Test Again")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = { stopScan() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Stop, contentDescription = null)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Reset / Cancel Scan")
                 }
             }
 
@@ -520,15 +655,24 @@ fun CodeFinderScreen(
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Would you like to import the complete remote button set from this profile?",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (lastHitCandidate != null) {
+                        Text(
+                            text = "Would you like to import the complete remote button set from this profile into your remotes?",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(
+                            text = "Would you like to save this working code as a new remote?",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             },
             confirmButton = {
                 val candidate = lastHitCandidate
+                val signal = lastHitSignal
                 if (candidate != null) {
                     Button(
                         onClick = {
@@ -538,6 +682,7 @@ fun CodeFinderScreen(
                                     customName = "${candidate.brand} ${candidate.model}"
                                 )
                                 showMatchDialog = false
+                                stopScan()
                                 onRemoteImported(newId)
                             }
                         }
@@ -545,6 +690,40 @@ fun CodeFinderScreen(
                         Icon(imageVector = Icons.Default.BookmarkAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Import Full Remote")
+                    }
+                } else if (signal != null) {
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                val remoteName = "Discovered $generalProtocol Remote"
+                                val newRemoteId = container.remoteRepository.saveRemote(
+                                    SavedRemote(
+                                        name = remoteName,
+                                        brand = "Generic",
+                                        deviceType = "Electronic",
+                                        category = "Other",
+                                        icon = "⚡"
+                                    )
+                                )
+                                container.remoteRepository.saveButton(
+                                    SavedButton(
+                                        remoteId = newRemoteId,
+                                        label = "POWER",
+                                        frequencyHz = signal.frequencyHz,
+                                        patternMicros = signal.patternMicros.joinToString(","),
+                                        protocol = signal.protocol,
+                                        functionCode = generalFunctionCode
+                                    )
+                                )
+                                showMatchDialog = false
+                                stopScan()
+                                onRemoteImported(newRemoteId)
+                            }
+                        }
+                    ) {
+                        Icon(imageVector = Icons.Default.BookmarkAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Save as New Remote")
                     }
                 } else {
                     Button(

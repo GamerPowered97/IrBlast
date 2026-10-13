@@ -433,7 +433,10 @@ fun CustomSignalScreen(
             onDismissRequest = { showSaveDialog = false },
             title = { Text("Save Signal as Button") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     OutlinedTextField(
                         value = buttonLabel,
                         onValueChange = { buttonLabel = it },

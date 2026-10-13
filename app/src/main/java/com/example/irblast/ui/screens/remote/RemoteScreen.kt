@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -258,13 +259,19 @@ fun RemoteScreen(
                         .width(68.dp)
                         .clip(RoundedCornerShape(34.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .padding(vertical = 4.dp),
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                            RoundedCornerShape(34.dp)
+                        )
+                        .padding(vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     volUpBtn?.let {
                         IrButton(
                             label = "VOL +",
                             icon = "vol_up",
+                            variant = ButtonStyleVariant.CIRCLE,
                             hapticsEnabled = hapticsEnabled,
                             modifier = Modifier.size(56.dp),
                             shape = CircleShape,
@@ -278,6 +285,7 @@ fun RemoteScreen(
                         IrButton(
                             label = "VOL -",
                             icon = "vol_down",
+                            variant = ButtonStyleVariant.CIRCLE,
                             hapticsEnabled = hapticsEnabled,
                             modifier = Modifier.size(56.dp),
                             shape = CircleShape,
@@ -288,15 +296,16 @@ fun RemoteScreen(
 
                 // Middle Quick Navigation (Home / Menu)
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     homeBtn?.let {
                         IrButton(
                             label = "HOME",
                             icon = "home",
+                            variant = ButtonStyleVariant.CIRCLE,
                             hapticsEnabled = hapticsEnabled,
-                            modifier = Modifier.size(52.dp),
+                            modifier = Modifier.size(54.dp),
                             shape = CircleShape,
                             onClick = { blast(it) }
                         )
@@ -305,8 +314,9 @@ fun RemoteScreen(
                         IrButton(
                             label = "MENU",
                             icon = "menu",
+                            variant = ButtonStyleVariant.CIRCLE,
                             hapticsEnabled = hapticsEnabled,
-                            modifier = Modifier.size(52.dp),
+                            modifier = Modifier.size(54.dp),
                             shape = CircleShape,
                             onClick = { blast(it) }
                         )
@@ -319,13 +329,19 @@ fun RemoteScreen(
                         .width(68.dp)
                         .clip(RoundedCornerShape(34.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .padding(vertical = 4.dp),
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                            RoundedCornerShape(34.dp)
+                        )
+                        .padding(vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     chUpBtn?.let {
                         IrButton(
                             label = "CH +",
                             icon = "up",
+                            variant = ButtonStyleVariant.CIRCLE,
                             hapticsEnabled = hapticsEnabled,
                             modifier = Modifier.size(56.dp),
                             shape = CircleShape,
@@ -339,6 +355,7 @@ fun RemoteScreen(
                         IrButton(
                             label = "CH -",
                             icon = "down",
+                            variant = ButtonStyleVariant.CIRCLE,
                             hapticsEnabled = hapticsEnabled,
                             modifier = Modifier.size(56.dp),
                             shape = CircleShape,

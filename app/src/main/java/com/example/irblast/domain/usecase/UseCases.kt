@@ -36,10 +36,12 @@ class ScanCodeFinderUseCase(
 ) {
     fun scanCandidates(
         candidates: List<IrdbCandidate>,
-        delayMs: Long = 400L
+        delayMs: Long = 400L,
+        startIndex: Int = 0
     ): Flow<ScanProgressEvent> = flow {
         val total = candidates.size
-        for (i in 0 until total) {
+        val safeStart = startIndex.coerceIn(0, total)
+        for (i in safeStart until total) {
             val candidate = candidates[i]
             val signal = ProtocolEncoder.encode(
                 candidate.protocol,
@@ -68,10 +70,12 @@ class ScanCodeFinderUseCase(
         protocol: String,
         functionCode: Int = 2, // Standard power code
         delayMs: Long = 350L,
+        startAddress: Int = 0,
         maxAddresses: Int = 256
     ): Flow<ScanProgressEvent> = flow {
         val total = maxAddresses
-        for (addr in 0 until total) {
+        val safeStart = startAddress.coerceIn(0, total)
+        for (addr in safeStart until total) {
             val signal = ProtocolEncoder.encode(
                 protocol = protocol,
                 device = addr,

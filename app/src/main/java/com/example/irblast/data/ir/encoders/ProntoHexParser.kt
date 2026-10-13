@@ -10,7 +10,10 @@ object ProntoHexParser {
 
         require(tokens.size >= 4) { "Pronto hex must contain at least 4 preamble words" }
 
-        val words = tokens.map { it.toInt(16) }
+        val words = tokens.map { 
+            val clean = it.removePrefix("0x").removePrefix("0X")
+            clean.toInt(16) 
+        }
         val format = words[0]
         require(format == 0) { "Only raw Pronto hex (format 0000) is supported" }
 
@@ -25,17 +28,20 @@ object ProntoHexParser {
 
         require(availablePairs > 0) { "Pronto hex has no pulse pairs defined" }
 
-        val pairsToRead = if (onceCount > 0) onceCount else repeatCount
-        val actualPairs = minOf(pairsToRead, availablePairs)
+        val pairsToRead = if (totalExpectedPairs > 0) {
+            minOf(totalExpectedPairs, availablePairs)
+        } else {
+            availablePairs
+        }
 
-        val pattern = ArrayList<Int>(actualPairs * 2)
+        val pattern = ArrayList<Int>(pairsToRead * 2)
         var idx = 4
-        for (i in 0 until actualPairs) {
+        for (i in 0 until pairsToRead) {
             val markCycles = words[idx++]
             val spaceCycles = words[idx++]
 
-            val markMicros = ((markCycles * 1000000L) / frequencyHz).toInt()
-            val spaceMicros = ((spaceCycles * 1000000L) / frequencyHz).toInt()
+            val markMicros = maxOf(1, ((markCycles * 1000000L) / frequencyHz).toInt())
+            val spaceMicros = maxOf(1, ((spaceCycles * 1000000L) / frequencyHz).toInt())
 
             pattern.add(markMicros)
             pattern.add(spaceMicros)

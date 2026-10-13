@@ -3,18 +3,17 @@ package com.example.irblast.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -29,15 +28,37 @@ fun DPad(
 ) {
     Box(
         modifier = modifier
-            .size(200.dp)
+            .size(220.dp)
+            .shadow(elevation = 8.dp, shape = CircleShape, spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .border(2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), CircleShape),
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.surfaceVariant,
+                        MaterialTheme.colorScheme.surface,
+                        Color(0xFF07080F)
+                    )
+                )
+            )
+            .border(
+                width = 2.dp,
+                brush = Brush.sweepGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                    )
+                ),
+                shape = CircleShape
+            )
+            .padding(8.dp),
         contentAlignment = Alignment.Center
     ) {
         // Up button
         Box(
-            modifier = Modifier.align(Alignment.TopCenter),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             IrButton(
@@ -45,14 +66,16 @@ fun DPad(
                 icon = "up",
                 variant = ButtonStyleVariant.CIRCLE,
                 hapticsEnabled = hapticsEnabled,
-                modifier = Modifier.size(54.dp),
+                modifier = Modifier.size(52.dp),
                 onClick = onUp
             )
         }
 
         // Down button
         Box(
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             IrButton(
@@ -60,14 +83,16 @@ fun DPad(
                 icon = "down",
                 variant = ButtonStyleVariant.CIRCLE,
                 hapticsEnabled = hapticsEnabled,
-                modifier = Modifier.size(54.dp),
+                modifier = Modifier.size(52.dp),
                 onClick = onDown
             )
         }
 
         // Left button
         Box(
-            modifier = Modifier.align(Alignment.CenterStart),
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             IrButton(
@@ -75,14 +100,16 @@ fun DPad(
                 icon = "left",
                 variant = ButtonStyleVariant.CIRCLE,
                 hapticsEnabled = hapticsEnabled,
-                modifier = Modifier.size(54.dp),
+                modifier = Modifier.size(52.dp),
                 onClick = onLeft
             )
         }
 
         // Right button
         Box(
-            modifier = Modifier.align(Alignment.CenterEnd),
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             IrButton(
@@ -90,7 +117,7 @@ fun DPad(
                 icon = "right",
                 variant = ButtonStyleVariant.CIRCLE,
                 hapticsEnabled = hapticsEnabled,
-                modifier = Modifier.size(54.dp),
+                modifier = Modifier.size(52.dp),
                 onClick = onRight
             )
         }
@@ -104,7 +131,7 @@ fun DPad(
                 label = "OK",
                 variant = ButtonStyleVariant.ACCENT,
                 hapticsEnabled = hapticsEnabled,
-                modifier = Modifier.size(64.dp),
+                modifier = Modifier.size(68.dp),
                 shape = CircleShape,
                 onClick = onOk
             )

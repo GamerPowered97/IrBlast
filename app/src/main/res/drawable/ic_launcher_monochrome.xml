@@ -1,0 +1,65 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outermost IR Wave Arc -->
+    <path
+        android:pathData="M 32,38 A 28,28 0 0,1 76,38"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:strokeColor="#FFFFFF"
+        android:fillColor="#00000000" />
+
+    <!-- Mid IR Wave Arc -->
+    <path
+        android:pathData="M 37.5,43.5 A 21,21 0 0,1 70.5,43.5"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:strokeColor="#FFFFFF"
+        android:fillColor="#00000000" />
+
+    <!-- Inner IR Wave Arc -->
+    <path
+        android:pathData="M 43.5,48.5 A 14,14 0 0,1 64.5,48.5"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round"
+        android:strokeColor="#FFFFFF"
+        android:fillColor="#00000000" />
+
+    <!-- Emitter Diode Core / LED lens -->
+    <path
+        android:pathData="M 54,52 m -3,0 a 3,3 0 1,1 6,0 a 3,3 0 1,1 -6,0"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Remote Body Outer Shell (Clean stroked contour) -->
+    <path
+        android:pathData="M 44,57
+                          h 20
+                          a 4,4 0 0,1 4,4
+                          v 17
+                          a 6,6 0 0,1 -6,6
+                          h -16
+                          a 6,6 0 0,1 -6,-6
+                          v -17
+                          a 4,4 0 0,1 4,-4
+                          z"
+        android:strokeWidth="2.2"
+        android:strokeColor="#FFFFFF"
+        android:fillColor="#00000000" />
+
+    <!-- Remote Power Accent Dot -->
+    <path
+        android:pathData="M 54,65 m -2.5,0 a 2.5,2.5 0 1,1 5,0 a 2.5,2.5 0 1,1 -5,0"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Remote Keypad Accent Lines -->
+    <path
+        android:pathData="M 47,72 h 14 M 49,77 h 10"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeColor="#FFFFFF"
+        android:fillColor="#00000000" />
+
+</vector>

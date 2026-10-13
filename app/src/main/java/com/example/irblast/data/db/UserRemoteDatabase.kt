@@ -8,7 +8,7 @@ import com.example.irblast.data.ir.encoders.NecEncoder
 import com.example.irblast.domain.model.SavedButton
 import com.example.irblast.domain.model.SavedRemote
 
-class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_remotes.db", null, 1) {
+class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_remotes.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""
@@ -48,7 +48,9 @@ class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_rem
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Migration logic if schema changes
+        db.execSQL("DROP TABLE IF EXISTS saved_buttons")
+        db.execSQL("DROP TABLE IF EXISTS saved_remotes")
+        onCreate(db)
     }
 
     private fun seedInitialRemote(db: SQLiteDatabase) {

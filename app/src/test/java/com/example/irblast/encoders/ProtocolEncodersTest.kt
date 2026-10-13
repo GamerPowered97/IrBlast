@@ -32,9 +32,33 @@ class ProtocolEncodersTest {
 
     @Test
     fun testNecEncoder_extendedSubdevice() {
+        // Samsung TV Power: device = 7, subDevice = 7, function = 2
         val signal = NecEncoder.encode(device = 7, subDevice = 7, function = 2)
         assertEquals(38000, signal.frequencyHz)
         assertEquals(67, signal.patternMicros.size)
+
+        // Verify Byte 0 (device = 7): bits 0, 1, 2 are 1 (ONE_SPACE = 1690)
+        assertEquals(1690, signal.patternMicros[3])
+        assertEquals(1690, signal.patternMicros[5])
+        assertEquals(1690, signal.patternMicros[7])
+        assertEquals(560, signal.patternMicros[9])
+
+        // Verify Byte 1 (subDevice = 7): must NOT be inverted to 248. Bits 0, 1, 2 must be 1 (1690)
+        assertEquals(1690, signal.patternMicros[19])
+        assertEquals(1690, signal.patternMicros[21])
+        assertEquals(1690, signal.patternMicros[23])
+        assertEquals(560, signal.patternMicros[25])
+    }
+
+    @Test
+    fun testNecEncoder_standardInversionWhenNoSubdevice() {
+        // Standard NEC (subDevice = -1): subByte should be ~device
+        val signal = NecEncoder.encode(device = 7, subDevice = -1, function = 2)
+        // Subdevice is inverted: 7 -> ~7 = 248 (0b11111000). Bits 0, 1, 2 are 0 (560)
+        assertEquals(560, signal.patternMicros[19])
+        assertEquals(560, signal.patternMicros[21])
+        assertEquals(560, signal.patternMicros[23])
+        assertEquals(1690, signal.patternMicros[25])
     }
 
     @Test
@@ -47,8 +71,8 @@ class ProtocolEncodersTest {
     }
 
     @Test
-    fun testSonyEncoder_12Bit() {
-        val signal = SonyEncoder.encode(bitLength = 12, device = 1, function = 21)
+    fun testSonyEncoder_12BitSingleFrame() {
+        val signal = SonyEncoder.encode(bitLength = 12, device = 1, function = 21, repeats = 1)
         assertEquals(40000, signal.frequencyHz)
         assertEquals("SONY12", signal.protocol)
         // Leader: 2, 7 bits func: 14, 5 bits dev: 10 -> total 26 elements
@@ -58,11 +82,26 @@ class ProtocolEncodersTest {
     }
 
     @Test
+    fun testSonyEncoder_12BitRepeatedFrames() {
+        // Physical Sony hardware standard: 3 repeats with 45ms cycle period
+        val signal = SonyEncoder.encode(bitLength = 12, device = 1, function = 21, repeats = 3)
+        assertEquals(40000, signal.frequencyHz)
+        assertEquals(78, signal.patternMicros.size) // 26 * 3 elements
+        // First leader
+        assertEquals(2400, signal.patternMicros[0])
+        assertEquals(600, signal.patternMicros[1])
+        // Second frame leader at index 26
+        assertEquals(2400, signal.patternMicros[26])
+        // Inter-frame gap at index 25 should be around 25ms - 30ms (to complete 45ms cycle)
+        assertTrue("Inter-frame gap should be > 20000us, was ${signal.patternMicros[25]}", signal.patternMicros[25] > 20000)
+    }
+
+    @Test
     fun testSonyEncoder_15BitAnd20Bit() {
-        val s15 = SonyEncoder.encode(bitLength = 15, device = 1, function = 21)
+        val s15 = SonyEncoder.encode(bitLength = 15, device = 1, function = 21, repeats = 1)
         assertEquals(32, s15.patternMicros.size)
 
-        val s20 = SonyEncoder.encode(bitLength = 20, device = 1, subDevice = 2, function = 21)
+        val s20 = SonyEncoder.encode(bitLength = 20, device = 1, subDevice = 2, function = 21, repeats = 1)
         assertEquals(42, s20.patternMicros.size)
     }
 
@@ -116,6 +155,33 @@ class ProtocolEncodersTest {
     }
 
     @Test
+    fun testProntoHexParser_introAndRepeatBursts() {
+        // 1 once-pair + 1 repeat-pair = 2 pairs total (4 elements)
+        val pronto = "0000 006d 0001 0001 0155 00aa 0015 0015"
+        val result = ProntoHexParser.parse(pronto)
+        assertTrue(result.isSuccess)
+        val signal = result.getOrThrow()
+        assertEquals(4, signal.patternMicros.size)
+    }
+
+    @Test
+    fun testProntoHexParser_withHexPrefix() {
+        val pronto = "0x0000 0x006d 0x0002 0x0000 0x0155 0x00aa 0x0015 0x0015"
+        val result = ProntoHexParser.parse(pronto)
+        assertTrue(result.isSuccess)
+        assertEquals(4, result.getOrThrow().patternMicros.size)
+    }
+
+    @Test
+    fun testProntoHexParser_zeroCountsFallback() {
+        // Header with onceCount = 0 and repeatCount = 0
+        val pronto = "0000 006d 0000 0000 0155 00aa 0015 0015"
+        val result = ProntoHexParser.parse(pronto)
+        assertTrue(result.isSuccess)
+        assertEquals(4, result.getOrThrow().patternMicros.size)
+    }
+
+    @Test
     fun testProntoHexParser_invalidFormats() {
         // Empty
         assertTrue(ProntoHexParser.parse("").isFailure)
@@ -143,6 +209,7 @@ class ProtocolEncodersTest {
         assertTrue(RawPatternParser.parse("").isFailure)
         assertTrue(RawPatternParser.parse("9000").isFailure) // Less than 2 pulses
         assertTrue(RawPatternParser.parse("9000, -500").isFailure) // Negative pulse
+        assertTrue(RawPatternParser.parse("9000, 0").isFailure) // Zero pulse
     }
 
     @Test
@@ -154,6 +221,8 @@ class ProtocolEncodersTest {
         val sony = ProtocolEncoder.encode("Sony12", 1, -1, 2)
         assertNotNull(sony)
         assertEquals("SONY12", sony?.protocol)
+        // ProtocolEncoder uses 3 repeats for reliable transmission to Sony electronics
+        assertEquals(78, sony?.patternMicros?.size)
 
         val rc5 = ProtocolEncoder.encode("RC5", 0, -1, 1)
         assertNotNull(rc5)

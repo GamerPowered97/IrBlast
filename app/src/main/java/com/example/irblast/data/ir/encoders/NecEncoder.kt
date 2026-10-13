@@ -13,7 +13,7 @@ object NecEncoder {
 
     fun encode(device: Int, subDevice: Int, function: Int): IrSignal {
         val devByte = device and 0xFF
-        val subByte = if (subDevice >= 0 && subDevice != device) {
+        val subByte = if (subDevice >= 0) {
             subDevice and 0xFF
         } else {
             devByte.inv() and 0xFF

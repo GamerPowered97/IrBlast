@@ -10,11 +10,43 @@ object SonyEncoder {
     private const val ONE_MARK = 1200
     private const val BIT_SPACE = 600
 
-    fun encode(bitLength: Int, device: Int, subDevice: Int = -1, function: Int): IrSignal {
+    private const val FRAME_PERIOD_US = 45000 // 45ms SIRC standard message cycle time
+
+    fun encode(bitLength: Int, device: Int, subDevice: Int = -1, function: Int, repeats: Int = 1): IrSignal {
+        val singleFrame = encodeSingleFrame(bitLength, device, subDevice, function)
+        if (repeats <= 1) {
+            return IrSignal(
+                frequencyHz = FREQUENCY_HZ,
+                patternMicros = singleFrame,
+                protocol = "SONY$bitLength"
+            )
+        }
+
+        val frameDuration = singleFrame.sum()
+        val interFrameGap = maxOf(BIT_SPACE, FRAME_PERIOD_US - frameDuration)
+
+        val fullPattern = ArrayList<Int>(singleFrame.size * repeats)
+        for (r in 0 until repeats) {
+            for (idx in 0 until singleFrame.size - 1) {
+                fullPattern.add(singleFrame[idx])
+            }
+            if (r < repeats - 1) {
+                fullPattern.add(interFrameGap)
+            } else {
+                fullPattern.add(singleFrame.last())
+            }
+        }
+
+        return IrSignal(
+            frequencyHz = FREQUENCY_HZ,
+            patternMicros = fullPattern.toIntArray(),
+            protocol = "SONY$bitLength"
+        )
+    }
+
+    private fun encodeSingleFrame(bitLength: Int, device: Int, subDevice: Int, function: Int): IntArray {
         val pattern = ArrayList<Int>()
 
-        // SIRC standard sends 3 repeated frames with ~25-45ms space between frames
-        // A single frame:
         pattern.add(LEADER_MARK)
         pattern.add(LEADER_SPACE)
 
@@ -71,10 +103,6 @@ object SonyEncoder {
             }
         }
 
-        return IrSignal(
-            frequencyHz = FREQUENCY_HZ,
-            patternMicros = pattern.toIntArray(),
-            protocol = "SONY$bitLength"
-        )
+        return pattern.toIntArray()
     }
 }

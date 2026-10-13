@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -24,11 +25,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.irblast.theme.IrSuccess
+import com.example.irblast.theme.IrWarning
 
 @Composable
 fun HardwareStatusBanner(
@@ -36,15 +40,37 @@ fun HardwareStatusBanner(
     isBlasting: Boolean = false,
     modifier: Modifier = Modifier
 ) {
+    val statusColor = if (isHardwareAvailable) IrSuccess else IrWarning
+    val shape = RoundedCornerShape(14.dp)
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(shape)
             .background(
-                if (isBlasting) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                if (isBlasting) {
+                    Brush.horizontalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                        )
+                    )
+                } else {
+                    Brush.horizontalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+                        )
+                    )
+                }
             )
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .border(
+                width = 1.dp,
+                color = if (isBlasting) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                shape = shape
+            )
+            .padding(horizontal = 14.dp, vertical = 9.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -52,27 +78,27 @@ fun HardwareStatusBanner(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Status glowing dot
                 Box(
                     modifier = Modifier
                         .size(10.dp)
+                        .shadow(4.dp, CircleShape, spotColor = statusColor)
                         .clip(CircleShape)
-                        .background(
-                            if (isHardwareAvailable) IrSuccess else Color(0xFFFFB020)
-                        )
+                        .background(statusColor)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Icon(
                     imageVector = if (isHardwareAvailable) Icons.Default.Sensors else Icons.Default.SensorsOff,
                     contentDescription = null,
-                    tint = if (isHardwareAvailable) IrSuccess else Color(0xFFFFB020),
+                    tint = statusColor,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (isHardwareAvailable) "IR Blaster Ready" else "Simulation Mode",
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -85,6 +111,7 @@ fun HardwareStatusBanner(
                     Box(
                         modifier = Modifier
                             .size(8.dp)
+                            .shadow(4.dp, CircleShape, spotColor = MaterialTheme.colorScheme.primary)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary)
                     )
@@ -92,8 +119,9 @@ fun HardwareStatusBanner(
                     Text(
                         text = "TRANSMITTING",
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary,
+                        letterSpacing = 0.5.sp
                     )
                 }
             }

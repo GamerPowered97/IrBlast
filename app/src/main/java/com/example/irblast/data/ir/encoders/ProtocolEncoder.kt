@@ -11,18 +11,18 @@ object ProtocolEncoder {
                 NecEncoder.encode(device, subDevice, function)
             }
             proto == "SONY12" || proto == "SIRC12" -> {
-                SonyEncoder.encode(12, device, subDevice, function)
+                SonyEncoder.encode(12, device, subDevice, function, repeats = 3)
             }
             proto == "SONY15" || proto == "SIRC15" -> {
-                SonyEncoder.encode(15, device, subDevice, function)
+                SonyEncoder.encode(15, device, subDevice, function, repeats = 3)
             }
             proto == "SONY20" || proto == "SIRC20" -> {
-                SonyEncoder.encode(20, device, subDevice, function)
+                SonyEncoder.encode(20, device, subDevice, function, repeats = 3)
             }
             proto == "SONY" || proto == "SIRC" -> {
                 // If subdevice is provided and valid, use 20-bit, otherwise 12-bit
-                if (subDevice > 0) SonyEncoder.encode(20, device, subDevice, function)
-                else SonyEncoder.encode(12, device, subDevice, function)
+                if (subDevice > 0) SonyEncoder.encode(20, device, subDevice, function, repeats = 3)
+                else SonyEncoder.encode(12, device, subDevice, function, repeats = 3)
             }
             proto.startsWith("RC5") -> {
                 Rc5Encoder.encode(device, function)
