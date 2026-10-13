@@ -8,7 +8,7 @@ android {
     namespace = "com.example.irblast"
     compileSdk = 36
     defaultConfig {
-        applicationId = "com.gamerpowered.irblast"
+        applicationId = "com.irblast.remote"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

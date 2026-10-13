@@ -41,7 +41,7 @@ Built with **Jetpack Compose**, **Material 3**, and Android's native `ConsumerIr
 
 ## 📦 Package Information
 
-- **Package Name / Application ID:** `com.gamerpowered.irblast`
+- **Package Name / Application ID:** `com.irblast.remote`
 - **Minimum SDK:** Android 8.0 (API 26)
 - **Target SDK:** Android 15 (API 36)
 
