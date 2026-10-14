@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -107,7 +108,7 @@ fun CustomSignalScreen(
         coroutineScope.launch {
             isBlasting = true
             val result = container.sendIrSignalUseCase.execute(signal)
-            if (!result.isSuccess) {
+            if (!result.isSuccess && !result.isSimulated) {
                 Toast.makeText(context, result.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
             }
             delay(250)
@@ -142,6 +143,7 @@ fun CustomSignalScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
+                .imePadding()
         ) {
             HardwareStatusBanner(
                 isHardwareAvailable = container.irBlasterManager.isHardwareAvailable,
@@ -171,7 +173,37 @@ fun CustomSignalScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            LaunchedEffect(selectedTab) {
+                parseError = null
+                when (selectedTab) {
+                    0 -> {
+                        if (prontoInput.isNotBlank()) {
+                            val res = ProntoHexParser.parse(prontoInput)
+                            lastParsedSignal = res.getOrNull()
+                            parseError = res.exceptionOrNull()?.message
+                        } else {
+                            lastParsedSignal = null
+                        }
+                    }
+                    1 -> {
+                        if (rawInput.isNotBlank()) {
+                            val res = RawPatternParser.parse(rawInput, rawFrequency.toIntOrNull() ?: 38000)
+                            lastParsedSignal = res.getOrNull()
+                            parseError = res.exceptionOrNull()?.message
+                        } else {
+                            lastParsedSignal = null
+                        }
+                    }
+                    2 -> {
+                        lastParsedSignal = ProtocolEncoder.encode(
+                            protoType,
+                            protoDevice.toIntOrNull() ?: 0,
+                            protoSubdevice.toIntOrNull() ?: -1,
+                            protoFunction.toIntOrNull() ?: 0
+                        )
+                    }
+                }
+            }
 
             when (selectedTab) {
                 0 -> {
@@ -196,22 +228,47 @@ fun CustomSignalScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    OutlinedButton(
-                        onClick = {
-                            // Standard Samsung TV Power Pronto code
-                            prontoInput = "0000 006d 0022 0000 0156 00ac 0015 0041 0015 0041 0015 0041 0015 0016 0015 0016 0015 0016 0015 0016 0015 0016 0015 0041 0015 0041 0015 0041 0015 0016 0015 0016 0015 0016 0015 0016 0015 0016 0015 0016 0015 0041 0015 0016 0015 0016 0015 0016 0015 0016 0015 0016 0015 0016 0015 0041 0015 0016 0015 0041 0015 0041 0015 0041 0015 0041 0015 0041 0015 0041 0015 0689"
-                            val res = ProntoHexParser.parse(prontoInput)
-                            lastParsedSignal = res.getOrNull()
-                        }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Paste Sample Samsung Power Pronto", fontSize = 12.sp)
+                        OutlinedButton(
+                            onClick = {
+                                // Samsung TV Power Pronto code
+                                prontoInput = "0000 006d 0022 0000 0156 00ac 0015 0041 0015 0041 0015 0041 0015 0016 0015 0016 0015 0016 0015 0016 0015 0016 0015 0041 0015 0041 0015 0041 0015 0016 0015 0016 0015 0016 0015 0016 0015 0016 0015 0016 0015 0041 0015 0016 0015 0016 0015 0016 0015 0016 0015 0016 0015 0016 0015 0041 0015 0016 0015 0041 0015 0041 0015 0041 0015 0041 0015 0041 0015 0041 0015 0689"
+                                val res = ProntoHexParser.parse(prontoInput)
+                                lastParsedSignal = res.getOrNull()
+                            }
+                        ) {
+                            Text("Sample Samsung Power", fontSize = 12.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                // Sony TV Power Pronto code
+                                prontoInput = "0000 0067 0000 000d 0060 0018 0018 0018 0030 0018 0030 0018 0030 0018 0018 0018 0030 0018 0018 0018 0030 0018 0018 0018 0018 0018 0018 0018 0018 03e8"
+                                val res = ProntoHexParser.parse(prontoInput)
+                                lastParsedSignal = res.getOrNull()
+                            }
+                        ) {
+                            Text("Sample Sony Power", fontSize = 12.sp)
+                        }
                     }
                 }
                 1 -> {
                     // Raw Pulses Tab
                     OutlinedTextField(
                         value = rawFrequency,
-                        onValueChange = { rawFrequency = it },
+                        onValueChange = {
+                            rawFrequency = it
+                            if (rawInput.isNotBlank()) {
+                                val res = RawPatternParser.parse(rawInput, it.toIntOrNull() ?: 38000)
+                                lastParsedSignal = res.getOrNull()
+                                parseError = if (res.isFailure) res.exceptionOrNull()?.message else null
+                            }
+                        },
                         label = { Text("Carrier Frequency (Hz)") },
                         placeholder = { Text("38000") },
                         modifier = Modifier.fillMaxWidth(),
@@ -240,15 +297,33 @@ fun CustomSignalScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    OutlinedButton(
-                        onClick = {
-                            rawFrequency = "38000"
-                            rawInput = "9000, 4500, 560, 1690, 560, 1690, 560, 1690, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 1690, 560, 1690, 560, 1690, 560, 1690, 560, 1690, 560, 1690, 560"
-                            val res = RawPatternParser.parse(rawInput, 38000)
-                            lastParsedSignal = res.getOrNull()
-                        }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Paste Sample Raw Pulses", fontSize = 12.sp)
+                        OutlinedButton(
+                            onClick = {
+                                rawFrequency = "38000"
+                                rawInput = "9000, 4500, 560, 1690, 560, 1690, 560, 1690, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 560, 1690, 560, 1690, 560, 1690, 560, 1690, 560, 1690, 560, 1690, 560"
+                                val res = RawPatternParser.parse(rawInput, 38000)
+                                lastParsedSignal = res.getOrNull()
+                            }
+                        ) {
+                            Text("Sample NEC Pulse", fontSize = 12.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                rawFrequency = "36000"
+                                rawInput = "889, 889, 889, 889, 1778, 889, 889, 889, 889, 889, 889, 1778, 889, 889, 889, 889, 889, 889, 889, 889, 889, 889, 889, 889"
+                                val res = RawPatternParser.parse(rawInput, 36000)
+                                lastParsedSignal = res.getOrNull()
+                            }
+                        ) {
+                            Text("Sample RC5 Pulse", fontSize = 12.sp)
+                        }
                     }
                 }
                 2 -> {
@@ -436,14 +511,17 @@ fun CustomSignalScreen(
     if (showSaveDialog && lastParsedSignal != null) {
         val signalToSave = lastParsedSignal!!
         var buttonLabel by remember { mutableStateOf("Custom Signal") }
-        var selectedRemoteId by remember { mutableStateOf(savedRemotes.firstOrNull()?.id ?: -1L) }
+        var selectedRemoteId by remember(savedRemotes) { mutableStateOf(savedRemotes.firstOrNull()?.id ?: -1L) }
+        var createNewRemote by remember { mutableStateOf(savedRemotes.isEmpty()) }
 
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
             title = { Text("Save Signal as Button") },
             text = {
                 Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .imePadding(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedTextField(
@@ -454,32 +532,69 @@ fun CustomSignalScreen(
                     )
 
                     if (savedRemotes.isNotEmpty()) {
-                        Text(text = "Select Remote to Add To:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(text = "Target Remote Destination:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    createNewRemote = false
+                                    selectedRemoteId = savedRemotes.firstOrNull()?.id ?: -1L
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Existing Remotes (${savedRemotes.size}):",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
                         savedRemotes.forEach { r ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { selectedRemoteId = r.id }
+                                    .clickable {
+                                        createNewRemote = false
+                                        selectedRemoteId = r.id
+                                    }
                                     .padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "${r.icon} ${r.name} (${r.brand})",
-                                    color = if (selectedRemoteId == r.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = if (selectedRemoteId == r.id) FontWeight.Bold else FontWeight.Normal
+                                    text = "${if (!createNewRemote && selectedRemoteId == r.id) "🔘 " else "⚪ "}${r.icon} ${r.name} (${r.brand})",
+                                    color = if (!createNewRemote && selectedRemoteId == r.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = if (!createNewRemote && selectedRemoteId == r.id) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
                         }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { createNewRemote = true }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${if (createNewRemote) "🔘 " else "⚪ "}➕ Create as New Remote",
+                                color = if (createNewRemote) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                fontWeight = if (createNewRemote) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
                     } else {
-                        Text("No remotes exist. A new remote 'Custom IR Remote' will be created.")
+                        Text("No saved remotes exist yet. A new remote 'Custom IR Remote' will be created automatically.")
                     }
                 }
             },
             confirmButton = {
                 Button(
+                    enabled = buttonLabel.isNotBlank(),
                     onClick = {
                         coroutineScope.launch {
-                            val targetRemoteId = if (selectedRemoteId != -1L) {
+                            val targetRemoteId = if (!createNewRemote && selectedRemoteId != -1L) {
                                 selectedRemoteId
                             } else {
                                 container.remoteRepository.saveRemote(

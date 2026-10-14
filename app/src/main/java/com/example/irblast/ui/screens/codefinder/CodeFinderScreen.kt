@@ -12,12 +12,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.collectAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
@@ -110,17 +112,26 @@ fun CodeFinderScreen(
     var lastHitSignal by remember { mutableStateOf<IrSignal?>(null) }
     var showMatchDialog by remember { mutableStateOf(false) }
 
-    var scanDelayMs by remember { mutableFloatStateOf(400f) }
+    val defaultDelay by container.appSettingsManager.defaultScanDelay.collectAsState()
+    var scanDelayMs by remember(defaultDelay) { mutableFloatStateOf(defaultDelay.toFloat()) }
     var scanJob by remember { mutableStateOf<Job?>(null) }
+    var brandSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
 
     val categories = listOf("All", "TV", "Projector", "Audio", "AC / Climate", "Set-Top Box", "Media Player")
     val protocols = listOf("NEC", "SONY12", "SONY15", "RC5", "RC6", "JVC", "PANASONIC", "SHARP")
 
     fun loadSmartCandidates() {
         coroutineScope.launch {
+            val trimmedBrand = smartBrand.trim()
+            if (trimmedBrand.isNotEmpty()) {
+                val cat = if (smartCategory == "All") null else smartCategory
+                brandSuggestions = container.irdbRepository.getBrands(cat, trimmedBrand).take(6)
+            } else {
+                brandSuggestions = emptyList()
+            }
             smartCandidates = container.irdbRepository.getCandidatesForSmartScan(
                 category = if (smartCategory == "All") null else smartCategory,
-                brand = smartBrand.trim().ifBlank { null },
+                brand = trimmedBrand.ifBlank { null },
                 functionTarget = smartFunction
             )
         }
@@ -155,7 +166,7 @@ fun CodeFinderScreen(
             }
             coroutineScope.launch {
                 val result = container.sendIrSignalUseCase.execute(sig)
-                if (!result.isSuccess) {
+                if (!result.isSuccess && !result.isSimulated) {
                     Toast.makeText(context, result.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -254,6 +265,7 @@ fun CodeFinderScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
+                .imePadding()
         ) {
             HardwareStatusBanner(
                 isHardwareAvailable = container.irBlasterManager.isHardwareAvailable,
@@ -326,6 +338,39 @@ fun CodeFinderScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                if (brandSuggestions.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        brandSuggestions.forEach { suggestedBrand ->
+                            Card(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        stopScan()
+                                        smartBrand = suggestedBrand
+                                    },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = suggestedBrand,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -467,7 +512,7 @@ fun CodeFinderScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    val progressFraction = if (scanTotal > 0) scanProgressIndex.toFloat() / scanTotal.toFloat() else 0f
+                    val progressFraction = if (scanTotal > 0) (scanProgressIndex.toFloat() / scanTotal.toFloat()).coerceIn(0f, 1f) else 0f
                     LinearProgressIndicator(
                         progress = { progressFraction },
                         modifier = Modifier

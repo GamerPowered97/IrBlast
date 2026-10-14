@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -255,16 +256,21 @@ fun HomeScreen(
                                     val powerBtn = buttons.firstOrNull { it.label.contains("POWER", ignoreCase = true) }
                                         ?: buttons.firstOrNull()
                                     if (powerBtn != null) {
-                                        isBlasting = true
-                                        val result = container.sendIrSignalUseCase.execute(
-                                            powerBtn.frequencyHz,
-                                            powerBtn.toPatternIntArray()
-                                        )
-                                        if (!result.isSuccess) {
-                                            Toast.makeText(context, result.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
+                                        val pattern = powerBtn.toPatternIntArray()
+                                        if (pattern.isNotEmpty()) {
+                                            isBlasting = true
+                                            val result = container.sendIrSignalUseCase.execute(
+                                                powerBtn.frequencyHz,
+                                                pattern
+                                            )
+                                            if (!result.isSuccess && !result.isSimulated) {
+                                                Toast.makeText(context, result.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
+                                            }
+                                            delay(300)
+                                            isBlasting = false
+                                        } else {
+                                            Toast.makeText(context, "No signal pattern stored for '${powerBtn.label}'", Toast.LENGTH_SHORT).show()
                                         }
-                                        delay(300)
-                                        isBlasting = false
                                     }
                                 }
                             }
@@ -640,7 +646,9 @@ private fun CreateRemoteDialog(
         title = { Text("Create Custom Remote") },
         text = {
             Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .imePadding(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(

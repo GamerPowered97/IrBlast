@@ -98,7 +98,7 @@ class IrBlasterManager(private val context: Context) {
         } else {
             // Emulated / fallback mode for development or devices without IR emitter
             Log.i(tag, "Simulated IR signal: ${frequencyHz}Hz, ${safePattern.size} pulses (no hardware IR emitter detected)")
-            TransmitResult(isSuccess = false, isSimulated = true, errorMessage = "No physical IR emitter detected")
+            TransmitResult(isSuccess = true, isSimulated = true, errorMessage = "Simulated: No physical IR emitter detected")
         }
     }
 }

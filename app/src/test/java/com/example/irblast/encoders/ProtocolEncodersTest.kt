@@ -349,4 +349,142 @@ class ProtocolEncodersTest {
         assertEquals(0, signal.patternMicros.size % 2)
         assertEquals(20000, signal.patternMicros[3])
     }
+
+    @Test
+    fun testRawPatternParser_whitespaceAndCommas() {
+        val raw = "  9000 ,   4500,  560 , 560  "
+        val result = RawPatternParser.parse(raw, 38000)
+        assertTrue(result.isSuccess)
+        val signal = result.getOrThrow()
+        assertEquals(4, signal.patternMicros.size)
+        assertEquals(9000, signal.patternMicros[0])
+        assertEquals(4500, signal.patternMicros[1])
+    }
+
+    @Test
+    fun testProntoHexParser_sampleSony() {
+        val pronto = "0000 0067 0000 000d 0060 0018 0018 0018 0030 0018 0030 0018 0030 0018 0018 0018 0030 0018 0018 0018 0030 0018 0018 0018 0018 0018 0018 0018 0018 03e8"
+        val result = ProntoHexParser.parse(pronto)
+        assertTrue(result.isSuccess)
+        val signal = result.getOrThrow()
+        assertTrue("Frequency should be ~40kHz", signal.frequencyHz in 38000..42000)
+        assertEquals(26, signal.patternMicros.size)
+    }
+
+    @Test
+    fun testMapFunctionToIcon_allAppliances() {
+        // TV & General
+        assertEquals("power", com.example.irblast.data.repository.mapFunctionToIcon("POWER"))
+        assertEquals("mute", com.example.irblast.data.repository.mapFunctionToIcon("MUTE"))
+        assertEquals("vol_up", com.example.irblast.data.repository.mapFunctionToIcon("VOL +"))
+        assertEquals("vol_down", com.example.irblast.data.repository.mapFunctionToIcon("VOL -"))
+        assertEquals("ch_up", com.example.irblast.data.repository.mapFunctionToIcon("CH +"))
+        assertEquals("ch_down", com.example.irblast.data.repository.mapFunctionToIcon("CH -"))
+        assertEquals("ok", com.example.irblast.data.repository.mapFunctionToIcon("OK"))
+        assertEquals("menu", com.example.irblast.data.repository.mapFunctionToIcon("MENU"))
+        assertEquals("back", com.example.irblast.data.repository.mapFunctionToIcon("RETURN"))
+
+        // Climate / AC
+        assertEquals("up", com.example.irblast.data.repository.mapFunctionToIcon("TEMP +"))
+        assertEquals("down", com.example.irblast.data.repository.mapFunctionToIcon("TEMP -"))
+        assertEquals("menu", com.example.irblast.data.repository.mapFunctionToIcon("MODE"))
+
+        // Fan
+        assertEquals("up", com.example.irblast.data.repository.mapFunctionToIcon("SPEED +"))
+        assertEquals("down", com.example.irblast.data.repository.mapFunctionToIcon("SPEED -"))
+
+        // Projector
+        assertEquals("input", com.example.irblast.data.repository.mapFunctionToIcon("HDMI 1"))
+        assertEquals("input", com.example.irblast.data.repository.mapFunctionToIcon("KEYSTONE"))
+
+        // Media
+        assertEquals("play", com.example.irblast.data.repository.mapFunctionToIcon("PLAY"))
+        assertEquals("pause", com.example.irblast.data.repository.mapFunctionToIcon("PAUSE"))
+        assertEquals("stop", com.example.irblast.data.repository.mapFunctionToIcon("STOP"))
+    }
+
+    @Test
+    fun testSavedButton_toPatternIntArray() {
+        val emptyButton = com.example.irblast.domain.model.SavedButton(
+            remoteId = 1L,
+            label = "EMPTY",
+            patternMicros = ""
+        )
+        assertEquals(0, emptyButton.toPatternIntArray().size)
+
+        val validButton = com.example.irblast.domain.model.SavedButton(
+            remoteId = 1L,
+            label = "VALID",
+            patternMicros = "9000, 4500, 560, 1690"
+        )
+        val arr = validButton.toPatternIntArray()
+        assertEquals(4, arr.size)
+        assertEquals(9000, arr[0])
+        assertEquals(1690, arr[3])
+
+        // Space separated
+        val spaceButton = com.example.irblast.domain.model.SavedButton(
+            remoteId = 1L,
+            label = "SPACE",
+            patternMicros = "9000 4500 560 1690"
+        )
+        val spaceArr = spaceButton.toPatternIntArray()
+        assertEquals(4, spaceArr.size)
+        assertEquals(9000, spaceArr[0])
+        assertEquals(1690, spaceArr[3])
+
+        // Semicolon and mixed whitespace
+        val mixedButton = com.example.irblast.domain.model.SavedButton(
+            remoteId = 1L,
+            label = "MIXED",
+            patternMicros = " 9000; 4500 , 560 ; 1690 "
+        )
+        val mixedArr = mixedButton.toPatternIntArray()
+        assertEquals(4, mixedArr.size)
+        assertEquals(9000, mixedArr[0])
+        assertEquals(1690, mixedArr[3])
+    }
+
+    @Test
+    fun testRawPatternParser_invalidFrequencyClampedToDefault() {
+        val raw = "9000, 4500"
+        // Frequency too low (< 10000) or negative
+        val lowFreqResult = RawPatternParser.parse(raw, 500)
+        assertTrue(lowFreqResult.isSuccess)
+        assertEquals(38000, lowFreqResult.getOrThrow().frequencyHz)
+
+        val negativeFreqResult = RawPatternParser.parse(raw, -10)
+        assertTrue(negativeFreqResult.isSuccess)
+        assertEquals(38000, negativeFreqResult.getOrThrow().frequencyHz)
+
+        val highFreqResult = RawPatternParser.parse(raw, 150000)
+        assertTrue(highFreqResult.isSuccess)
+        assertEquals(38000, highFreqResult.getOrThrow().frequencyHz)
+
+        // Valid custom frequency in range
+        val validFreqResult = RawPatternParser.parse(raw, 56000)
+        assertTrue(validFreqResult.isSuccess)
+        assertEquals(56000, validFreqResult.getOrThrow().frequencyHz)
+    }
+
+    @Test
+    fun testRawPatternParser_rejectsInvalidOrEmpty() {
+        val emptyResult = RawPatternParser.parse("", 38000)
+        assertTrue(emptyResult.isFailure)
+
+        val nonPositiveResult = RawPatternParser.parse("9000, -500, 560, 560", 38000)
+        assertTrue(nonPositiveResult.isFailure)
+
+        val singlePulseResult = RawPatternParser.parse("9000", 38000)
+        assertTrue(singlePulseResult.isFailure)
+    }
+
+    @Test
+    fun testProntoHexParser_rejectsMalformed() {
+        val invalidResult = ProntoHexParser.parse("0000 0067 NOT_HEX")
+        assertTrue(invalidResult.isFailure)
+
+        val shortResult = ProntoHexParser.parse("0000 0067 0000")
+        assertTrue(shortResult.isFailure)
+    }
 }

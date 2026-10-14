@@ -26,7 +26,8 @@ data class SavedButton(
 ) {
     fun toPatternIntArray(): IntArray {
         if (patternMicros.isBlank()) return intArrayOf()
-        return patternMicros.split(",")
+        return patternMicros.split(Regex("[,\\s;]+"))
+            .filter { it.isNotBlank() }
             .mapNotNull { it.trim().toIntOrNull() }
             .toIntArray()
     }
