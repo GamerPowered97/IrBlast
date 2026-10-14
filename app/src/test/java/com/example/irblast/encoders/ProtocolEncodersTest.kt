@@ -10,6 +10,9 @@ import com.example.irblast.data.ir.encoders.Rc5Encoder
 import com.example.irblast.data.ir.encoders.Rc6Encoder
 import com.example.irblast.data.ir.encoders.SharpEncoder
 import com.example.irblast.data.ir.encoders.SonyEncoder
+import com.example.irblast.data.ir.encoders.Recs80Encoder
+import com.example.irblast.data.ir.encoders.MitsubishiEncoder
+import com.example.irblast.data.ir.encoders.AiwaEncoder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -487,4 +490,51 @@ class ProtocolEncodersTest {
         val shortResult = ProntoHexParser.parse("0000 0067 0000")
         assertTrue(shortResult.isFailure)
     }
+
+    @Test
+    fun testRecs80Encoder() {
+        val signal = Recs80Encoder.encode(device = 2, function = 16, repeats = 2)
+        assertEquals(38000, signal.frequencyHz)
+        // 24 elements per frame * 2 repeats = 48 elements (even)
+        assertEquals(48, signal.patternMicros.size)
+        assertEquals(0, signal.patternMicros.size % 2)
+        // Check start pulse unit (158 us)
+        assertEquals(158, signal.patternMicros[0])
+        // Check start bit space (space for '1' is 7426 us)
+        assertEquals(7426, signal.patternMicros[1])
+        // Stop gap at end of frame 1 (index 23)
+        assertEquals(45000, signal.patternMicros[23])
+
+        // Verify dispatch via ProtocolEncoder
+        val dispatched = ProtocolEncoder.encode("RECS80", 2, -1, 16)
+        assertNotNull(dispatched)
+        assertEquals(38000, dispatched!!.frequencyHz)
+    }
+
+    @Test
+    fun testMitsubishiEncoder() {
+        val signal = MitsubishiEncoder.encode(device = 1, function = 2, repeats = 2)
+        assertEquals(38000, signal.frequencyHz)
+        // 8 dev + 8 func = 16 bits -> 32 pulses + 1 stop pair = 34 elements * 2 repeats = 68 elements
+        assertEquals(68, signal.patternMicros.size)
+        assertEquals(0, signal.patternMicros.size % 2)
+        assertEquals(300, signal.patternMicros[0])
+
+        val dispatched = ProtocolEncoder.encode("Mitsubishi", 1, -1, 2)
+        assertNotNull(dispatched)
+    }
+
+    @Test
+    fun testAiwaEncoder() {
+        val signal = AiwaEncoder.encode(device = 1, subDevice = 2, function = 3, repeats = 2)
+        assertEquals(38000, signal.frequencyHz)
+        assertEquals(0, signal.patternMicros.size % 2)
+        // Leader mark and space
+        assertEquals(8800, signal.patternMicros[0])
+        assertEquals(4400, signal.patternMicros[1])
+
+        val dispatched = ProtocolEncoder.encode("Aiwa", 1, 2, 3)
+        assertNotNull(dispatched)
+    }
 }
+

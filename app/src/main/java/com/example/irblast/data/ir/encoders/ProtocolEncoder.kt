@@ -40,6 +40,15 @@ object ProtocolEncoder {
             proto.startsWith("SHARP") || proto.startsWith("DENON") -> {
                 SharpEncoder.encode(device, function, repeats = 2)
             }
+            proto == "RECS80" || proto.startsWith("RECS") -> {
+                Recs80Encoder.encode(device, function, repeats = 2)
+            }
+            proto.startsWith("MITSUBISHI") -> {
+                MitsubishiEncoder.encode(device, function, repeats = 2)
+            }
+            proto.startsWith("AIWA") -> {
+                AiwaEncoder.encode(device, subDevice, function, repeats = 2)
+            }
             else -> {
                 // Fallback for generic NEC-derived or unknown
                 if (proto.contains("NEC")) {
