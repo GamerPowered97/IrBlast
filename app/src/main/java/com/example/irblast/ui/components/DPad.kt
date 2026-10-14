@@ -20,10 +20,18 @@ import androidx.compose.ui.unit.dp
 fun DPad(
     modifier: Modifier = Modifier,
     hapticsEnabled: Boolean = true,
-    onUp: () -> Unit,
-    onDown: () -> Unit,
-    onLeft: () -> Unit,
-    onRight: () -> Unit,
+    onUpStart: (() -> Unit)? = null,
+    onUpEnd: (() -> Unit)? = null,
+    onDownStart: (() -> Unit)? = null,
+    onDownEnd: (() -> Unit)? = null,
+    onLeftStart: (() -> Unit)? = null,
+    onLeftEnd: (() -> Unit)? = null,
+    onRightStart: (() -> Unit)? = null,
+    onRightEnd: (() -> Unit)? = null,
+    onUp: () -> Unit = {},
+    onDown: () -> Unit = {},
+    onLeft: () -> Unit = {},
+    onRight: () -> Unit = {},
     onOk: () -> Unit
 ) {
     Box(
@@ -67,6 +75,8 @@ fun DPad(
                 variant = ButtonStyleVariant.CIRCLE,
                 hapticsEnabled = hapticsEnabled,
                 modifier = Modifier.size(52.dp),
+                onPressDown = onUpStart,
+                onPressUp = onUpEnd,
                 onClick = onUp
             )
         }
@@ -84,6 +94,8 @@ fun DPad(
                 variant = ButtonStyleVariant.CIRCLE,
                 hapticsEnabled = hapticsEnabled,
                 modifier = Modifier.size(52.dp),
+                onPressDown = onDownStart,
+                onPressUp = onDownEnd,
                 onClick = onDown
             )
         }
@@ -101,6 +113,8 @@ fun DPad(
                 variant = ButtonStyleVariant.CIRCLE,
                 hapticsEnabled = hapticsEnabled,
                 modifier = Modifier.size(52.dp),
+                onPressDown = onLeftStart,
+                onPressUp = onLeftEnd,
                 onClick = onLeft
             )
         }
@@ -118,6 +132,8 @@ fun DPad(
                 variant = ButtonStyleVariant.CIRCLE,
                 hapticsEnabled = hapticsEnabled,
                 modifier = Modifier.size(52.dp),
+                onPressDown = onRightStart,
+                onPressUp = onRightEnd,
                 onClick = onRight
             )
         }

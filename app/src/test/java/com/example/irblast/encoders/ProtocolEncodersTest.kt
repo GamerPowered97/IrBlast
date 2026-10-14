@@ -536,5 +536,67 @@ class ProtocolEncodersTest {
         val dispatched = ProtocolEncoder.encode("Aiwa", 1, 2, 3)
         assertNotNull(dispatched)
     }
+
+    @Test
+    fun testRcaEncoder() {
+        val signal56k = com.example.irblast.data.ir.encoders.RcaEncoder.encode(device = 7, function = 60, is38k = false, repeats = 1)
+        assertEquals(56000, signal56k.frequencyHz)
+        assertEquals("RCA", signal56k.protocol)
+        // 2 header + 24 * 2 bits + 1 stop mark + 1 trailing space = 52 elements
+        assertEquals(52, signal56k.patternMicros.size)
+        assertEquals(4000, signal56k.patternMicros[0])
+        assertEquals(4000, signal56k.patternMicros[1])
+        assertEquals(500, signal56k.patternMicros[50])
+        assertEquals(8000, signal56k.patternMicros[51])
+
+        val signal38k = com.example.irblast.data.ir.encoders.RcaEncoder.encode(device = 7, function = 60, is38k = true, repeats = 2)
+        assertEquals(38000, signal38k.frequencyHz)
+        assertEquals("RCA-38", signal38k.protocol)
+        assertEquals(104, signal38k.patternMicros.size)
+
+        // ProtocolEncoder dispatch
+        val d1 = ProtocolEncoder.encode("RCA", 7, -1, 60)
+        assertNotNull(d1)
+        assertEquals(56000, d1!!.frequencyHz)
+
+        val d2 = ProtocolEncoder.encode("RCA-38", 7, -1, 60)
+        assertNotNull(d2)
+        assertEquals(38000, d2!!.frequencyHz)
+    }
+
+    @Test
+    fun testFujitsuEncoder() {
+        val signal = com.example.irblast.data.ir.encoders.FujitsuEncoder.encode(device = 134, subDevice = -1, function = 0, repeats = 1)
+        assertEquals(37000, signal.frequencyHz)
+        assertEquals("FUJITSU", signal.protocol)
+        // 2 header + 48 * 2 bits + 1 stop + 1 trailing space = 100 elements
+        assertEquals(100, signal.patternMicros.size)
+        assertEquals(3456, signal.patternMicros[0])
+        assertEquals(1728, signal.patternMicros[1])
+        assertEquals(432, signal.patternMicros[98])
+        assertEquals(47520, signal.patternMicros[99])
+
+        val dispatched = ProtocolEncoder.encode("Fujitsu", 134, -1, 0)
+        assertNotNull(dispatched)
+        assertEquals(37000, dispatched!!.frequencyHz)
+    }
+
+    @Test
+    fun testDishNetworkEncoder() {
+        val signal = com.example.irblast.data.ir.encoders.DishNetworkEncoder.encode(device = 0, subDevice = 0, function = 2, repeats = 1)
+        assertEquals(56000, signal.frequencyHz)
+        assertEquals("DISH_NETWORK", signal.protocol)
+        // 2 header + 16 * 2 bits + 1 stop + 1 trailing space = 36 elements
+        assertEquals(36, signal.patternMicros.size)
+        assertEquals(400, signal.patternMicros[0])
+        assertEquals(6000, signal.patternMicros[1])
+        assertEquals(400, signal.patternMicros[34])
+        assertEquals(6000, signal.patternMicros[35])
+
+        val dispatched = ProtocolEncoder.encode("Dish_Network", 0, 0, 2)
+        assertNotNull(dispatched)
+        assertEquals(56000, dispatched!!.frequencyHz)
+    }
 }
+
 

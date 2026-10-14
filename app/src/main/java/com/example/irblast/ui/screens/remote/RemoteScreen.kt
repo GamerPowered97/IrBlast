@@ -1,5 +1,6 @@
 package com.example.irblast.ui.screens.remote
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -34,7 +35,14 @@ import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
+import com.example.irblast.data.ir.FlipperZeroIrParser
+import com.example.irblast.ui.components.isRepeatableAction
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -115,6 +123,9 @@ fun RemoteScreen(
         loadData()
     }
 
+    var repeatJob by remember { mutableStateOf<Job?>(null) }
+    val blastScope = rememberCoroutineScope()
+
     fun blast(button: SavedButton) {
         if (isEditMode) {
             buttonToEdit = button
@@ -125,18 +136,76 @@ fun RemoteScreen(
             Toast.makeText(context, "No pulse pattern stored for ${button.label}", Toast.LENGTH_SHORT).show()
             return
         }
-        coroutineScope.launch {
+        coroutineScope.launch(Dispatchers.IO) {
             isBlasting = true
             val result = container.sendIrSignalUseCase.execute(
                 button.frequencyHz,
                 pattern
             )
             if (!result.isSuccess && !result.isSimulated) {
-                Toast.makeText(context, result.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, result.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
+                }
             }
-            delay(250)
+            delay(200)
             isBlasting = false
         }
+    }
+
+    fun getProtocolCadenceMs(protocol: String): Long {
+        val proto = protocol.trim().uppercase()
+        return when {
+            proto.contains("SONY") || proto.contains("SIRC") -> 45L
+            proto.contains("DISH") -> 40L
+            proto.contains("RCA") -> 64L
+            proto.contains("RC5") || proto.contains("RC6") -> 114L
+            proto.contains("NEC") -> 108L
+            proto.contains("FUJITSU") -> 108L
+            proto.contains("PANASONIC") || proto.contains("KASEIKYO") -> 108L
+            proto.contains("DENON") || proto.contains("SHARP") -> 65L
+            proto.contains("SAMSUNG") -> 108L
+            else -> 108L
+        }
+    }
+
+    fun startContinuousBlast(button: SavedButton) {
+        if (isEditMode) {
+            buttonToEdit = button
+            return
+        }
+        val pattern = button.toPatternIntArray()
+        if (pattern.isEmpty()) {
+            Toast.makeText(context, "No pulse pattern stored for ${button.label}", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        repeatJob?.cancel()
+        repeatJob = blastScope.launch(Dispatchers.IO) {
+            val cadence = getProtocolCadenceMs(button.protocol)
+            isBlasting = true
+            // 1. Fire initial pulse train immediately
+            val initialResult = container.sendIrSignalUseCase.execute(button.frequencyHz, pattern)
+            if (!initialResult.isSuccess && !initialResult.isSimulated) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, initialResult.errorMessage ?: "Transmission failed", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            // Lead-in delay before cadence repeat loop starts
+            delay(maxOf(140L, cadence))
+
+            // 2. Transmit repeated cadence bursts until released
+            while (isActive) {
+                container.sendIrSignalUseCase.execute(button.frequencyHz, pattern)
+                delay(cadence)
+            }
+        }
+    }
+
+    fun stopContinuousBlast() {
+        repeatJob?.cancel()
+        repeatJob = null
+        isBlasting = false
     }
 
     // Determine layout category
@@ -189,6 +258,25 @@ fun RemoteScreen(
                             imageVector = if (isEditMode) Icons.Default.Check else Icons.Default.Edit,
                             contentDescription = if (isEditMode) "Done Editing" else "Edit Buttons",
                             tint = if (isEditMode) IrWarning else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    // Export Flipper .ir
+                    IconButton(onClick = {
+                        remote?.let { r ->
+                            val irText = FlipperZeroIrParser.export(r, buttons)
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, irText)
+                                putExtra(Intent.EXTRA_TITLE, "${r.name.replace(' ', '_')}.ir")
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Export .ir File"))
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Export .ir File",
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
@@ -330,6 +418,8 @@ fun RemoteScreen(
                             hapticsEnabled = hapticsEnabled,
                             isEditMode = isEditMode,
                             onBlast = { blast(it) },
+                            onBlastDown = { startContinuousBlast(it) },
+                            onBlastUp = { stopContinuousBlast() },
                             onEdit = { buttonToEdit = it }
                         )
                     }
@@ -339,6 +429,8 @@ fun RemoteScreen(
                             hapticsEnabled = hapticsEnabled,
                             isEditMode = isEditMode,
                             onBlast = { blast(it) },
+                            onBlastDown = { startContinuousBlast(it) },
+                            onBlastUp = { stopContinuousBlast() },
                             onEdit = { buttonToEdit = it }
                         )
                     }
@@ -348,6 +440,8 @@ fun RemoteScreen(
                             hapticsEnabled = hapticsEnabled,
                             isEditMode = isEditMode,
                             onBlast = { blast(it) },
+                            onBlastDown = { startContinuousBlast(it) },
+                            onBlastUp = { stopContinuousBlast() },
                             onEdit = { buttonToEdit = it }
                         )
                     }
@@ -357,6 +451,8 @@ fun RemoteScreen(
                             hapticsEnabled = hapticsEnabled,
                             isEditMode = isEditMode,
                             onBlast = { blast(it) },
+                            onBlastDown = { startContinuousBlast(it) },
+                            onBlastUp = { stopContinuousBlast() },
                             onEdit = { buttonToEdit = it }
                         )
                     }
@@ -367,6 +463,8 @@ fun RemoteScreen(
                             hapticsEnabled = hapticsEnabled,
                             isEditMode = isEditMode,
                             onBlast = { blast(it) },
+                            onBlastDown = { startContinuousBlast(it) },
+                            onBlastUp = { stopContinuousBlast() },
                             onEdit = { buttonToEdit = it }
                         )
                     }
@@ -427,6 +525,8 @@ private fun TvRemoteLayout(
     hapticsEnabled: Boolean,
     isEditMode: Boolean,
     onBlast: (SavedButton) -> Unit,
+    onBlastDown: ((SavedButton) -> Unit)? = null,
+    onBlastUp: (() -> Unit)? = null,
     onEdit: (SavedButton) -> Unit
 ) {
     val powerBtn = buttons.firstOrNull { it.label.contains("POWER", ignoreCase = true) || it.label.contains("STANDBY", ignoreCase = true) }
@@ -542,6 +642,8 @@ private fun TvRemoteLayout(
                             modifier = Modifier.size(56.dp),
                             shape = CircleShape,
                             onLongClick = { onEdit(it) },
+                            onPressDown = { onBlastDown?.invoke(it) ?: onBlast(it) },
+                            onPressUp = onBlastUp,
                             onClick = { onBlast(it) }
                         )
                     }
@@ -558,6 +660,8 @@ private fun TvRemoteLayout(
                             modifier = Modifier.size(56.dp),
                             shape = CircleShape,
                             onLongClick = { onEdit(it) },
+                            onPressDown = { onBlastDown?.invoke(it) ?: onBlast(it) },
+                            onPressUp = onBlastUp,
                             onClick = { onBlast(it) }
                         )
                     }
@@ -618,6 +722,8 @@ private fun TvRemoteLayout(
                             modifier = Modifier.size(56.dp),
                             shape = CircleShape,
                             onLongClick = { onEdit(it) },
+                            onPressDown = { onBlastDown?.invoke(it) ?: onBlast(it) },
+                            onPressUp = onBlastUp,
                             onClick = { onBlast(it) }
                         )
                     }
@@ -634,6 +740,8 @@ private fun TvRemoteLayout(
                             modifier = Modifier.size(56.dp),
                             shape = CircleShape,
                             onLongClick = { onEdit(it) },
+                            onPressDown = { onBlastDown?.invoke(it) ?: onBlast(it) },
+                            onPressUp = onBlastUp,
                             onClick = { onBlast(it) }
                         )
                     }
@@ -647,6 +755,14 @@ private fun TvRemoteLayout(
     if (upBtn != null || downBtn != null || leftBtn != null || rightBtn != null || okBtn != null) {
         DPad(
             hapticsEnabled = hapticsEnabled,
+            onUpStart = upBtn?.let { btn -> { onBlastDown?.invoke(btn) ?: onBlast(btn) } },
+            onUpEnd = onBlastUp,
+            onDownStart = downBtn?.let { btn -> { onBlastDown?.invoke(btn) ?: onBlast(btn) } },
+            onDownEnd = onBlastUp,
+            onLeftStart = leftBtn?.let { btn -> { onBlastDown?.invoke(btn) ?: onBlast(btn) } },
+            onLeftEnd = onBlastUp,
+            onRightStart = rightBtn?.let { btn -> { onBlastDown?.invoke(btn) ?: onBlast(btn) } },
+            onRightEnd = onBlastUp,
             onUp = { upBtn?.let { onBlast(it) } },
             onDown = { downBtn?.let { onBlast(it) } },
             onLeft = { leftBtn?.let { onBlast(it) } },
@@ -714,6 +830,8 @@ private fun TvRemoteLayout(
         hapticsEnabled = hapticsEnabled,
         isEditMode = isEditMode,
         onBlast = onBlast,
+        onBlastDown = onBlastDown,
+        onBlastUp = onBlastUp,
         onEdit = onEdit
     )
 }
@@ -728,6 +846,8 @@ private fun AcRemoteLayout(
     hapticsEnabled: Boolean,
     isEditMode: Boolean,
     onBlast: (SavedButton) -> Unit,
+    onBlastDown: ((SavedButton) -> Unit)? = null,
+    onBlastUp: (() -> Unit)? = null,
     onEdit: (SavedButton) -> Unit
 ) {
     val powerBtn = buttons.firstOrNull { it.label.contains("POWER", true) || it.label.contains("ON", true) || it.label.contains("OFF", true) }
@@ -840,6 +960,11 @@ private fun AcRemoteLayout(
                         modifier = Modifier.size(64.dp),
                         shape = CircleShape,
                         onLongClick = { onEdit(tempDownBtn) },
+                        onPressDown = {
+                            if (localTempDisplay > 16) localTempDisplay--
+                            onBlastDown?.invoke(tempDownBtn) ?: onBlast(tempDownBtn)
+                        },
+                        onPressUp = onBlastUp,
                         onClick = {
                             if (localTempDisplay > 16) localTempDisplay--
                             onBlast(tempDownBtn)
@@ -873,6 +998,11 @@ private fun AcRemoteLayout(
                         modifier = Modifier.size(64.dp),
                         shape = CircleShape,
                         onLongClick = { onEdit(tempUpBtn) },
+                        onPressDown = {
+                            if (localTempDisplay < 32) localTempDisplay++
+                            onBlastDown?.invoke(tempUpBtn) ?: onBlast(tempUpBtn)
+                        },
+                        onPressUp = onBlastUp,
                         onClick = {
                             if (localTempDisplay < 32) localTempDisplay++
                             onBlast(tempUpBtn)
@@ -942,6 +1072,8 @@ private fun AcRemoteLayout(
                         .height(44.dp)
                         .defaultMinSize(minWidth = 80.dp),
                     onLongClick = { onEdit(btn) },
+                    onPressDown = { onBlastDown?.invoke(btn) ?: onBlast(btn) },
+                    onPressUp = onBlastUp,
                     onClick = { onBlast(btn) }
                 )
             }
@@ -999,6 +1131,8 @@ private fun AcRemoteLayout(
         hapticsEnabled = hapticsEnabled,
         isEditMode = isEditMode,
         onBlast = onBlast,
+        onBlastDown = onBlastDown,
+        onBlastUp = onBlastUp,
         onEdit = onEdit
     )
 }
@@ -1013,6 +1147,8 @@ private fun ProjectorRemoteLayout(
     hapticsEnabled: Boolean,
     isEditMode: Boolean,
     onBlast: (SavedButton) -> Unit,
+    onBlastDown: ((SavedButton) -> Unit)? = null,
+    onBlastUp: (() -> Unit)? = null,
     onEdit: (SavedButton) -> Unit
 ) {
     val powerBtn = buttons.firstOrNull { it.label.contains("POWER", true) || it.label.contains("STANDBY", true) }
@@ -1116,6 +1252,14 @@ private fun ProjectorRemoteLayout(
     if (upBtn != null || downBtn != null || leftBtn != null || rightBtn != null || okBtn != null) {
         DPad(
             hapticsEnabled = hapticsEnabled,
+            onUpStart = upBtn?.let { btn -> { onBlastDown?.invoke(btn) ?: onBlast(btn) } },
+            onUpEnd = onBlastUp,
+            onDownStart = downBtn?.let { btn -> { onBlastDown?.invoke(btn) ?: onBlast(btn) } },
+            onDownEnd = onBlastUp,
+            onLeftStart = leftBtn?.let { btn -> { onBlastDown?.invoke(btn) ?: onBlast(btn) } },
+            onLeftEnd = onBlastUp,
+            onRightStart = rightBtn?.let { btn -> { onBlastDown?.invoke(btn) ?: onBlast(btn) } },
+            onRightEnd = onBlastUp,
             onUp = { upBtn?.let { onBlast(it) } },
             onDown = { downBtn?.let { onBlast(it) } },
             onLeft = { leftBtn?.let { onBlast(it) } },
@@ -1181,6 +1325,8 @@ private fun ProjectorRemoteLayout(
                         .height(44.dp)
                         .defaultMinSize(minWidth = 84.dp),
                     onLongClick = { onEdit(btn) },
+                    onPressDown = { onBlastDown?.invoke(btn) ?: onBlast(btn) },
+                    onPressUp = onBlastUp,
                     onClick = { onBlast(btn) }
                 )
             }
@@ -1225,6 +1371,8 @@ private fun ProjectorRemoteLayout(
         hapticsEnabled = hapticsEnabled,
         isEditMode = isEditMode,
         onBlast = onBlast,
+        onBlastDown = onBlastDown,
+        onBlastUp = onBlastUp,
         onEdit = onEdit
     )
 }
@@ -1239,6 +1387,8 @@ private fun AudioRemoteLayout(
     hapticsEnabled: Boolean,
     isEditMode: Boolean,
     onBlast: (SavedButton) -> Unit,
+    onBlastDown: ((SavedButton) -> Unit)? = null,
+    onBlastUp: (() -> Unit)? = null,
     onEdit: (SavedButton) -> Unit
 ) {
     val powerBtn = buttons.firstOrNull { it.label.contains("POWER", true) || it.label.contains("STANDBY", true) }
@@ -1329,6 +1479,8 @@ private fun AudioRemoteLayout(
                     modifier = Modifier.size(76.dp),
                     shape = CircleShape,
                     onLongClick = { onEdit(it) },
+                    onPressDown = { onBlastDown?.invoke(it) ?: onBlast(it) },
+                    onPressUp = onBlastUp,
                     onClick = { onBlast(it) }
                 )
             }
@@ -1345,6 +1497,8 @@ private fun AudioRemoteLayout(
                     modifier = Modifier.size(76.dp),
                     shape = CircleShape,
                     onLongClick = { onEdit(it) },
+                    onPressDown = { onBlastDown?.invoke(it) ?: onBlast(it) },
+                    onPressUp = onBlastUp,
                     onClick = { onBlast(it) }
                 )
             }
@@ -1439,6 +1593,8 @@ private fun AudioRemoteLayout(
                     modifier = Modifier.size(52.dp),
                     shape = CircleShape,
                     onLongClick = { onEdit(btn) },
+                    onPressDown = { onBlastDown?.invoke(btn) ?: onBlast(btn) },
+                    onPressUp = onBlastUp,
                     onClick = { onBlast(btn) }
                 )
             }
@@ -1452,6 +1608,8 @@ private fun AudioRemoteLayout(
         hapticsEnabled = hapticsEnabled,
         isEditMode = isEditMode,
         onBlast = onBlast,
+        onBlastDown = onBlastDown,
+        onBlastUp = onBlastUp,
         onEdit = onEdit
     )
 }
@@ -1466,6 +1624,8 @@ private fun FanRemoteLayout(
     hapticsEnabled: Boolean,
     isEditMode: Boolean,
     onBlast: (SavedButton) -> Unit,
+    onBlastDown: ((SavedButton) -> Unit)? = null,
+    onBlastUp: (() -> Unit)? = null,
     onEdit: (SavedButton) -> Unit
 ) {
     val powerBtn = buttons.firstOrNull { it.label.contains("POWER", true) || it.label.contains("ON", true) || it.label.contains("OFF", true) }
@@ -1568,6 +1728,8 @@ private fun FanRemoteLayout(
                             modifier = Modifier.size(64.dp),
                             shape = CircleShape,
                             onLongClick = { onEdit(it) },
+                            onPressDown = { onBlastDown?.invoke(it) ?: onBlast(it) },
+                            onPressUp = onBlastUp,
                             onClick = { onBlast(it) }
                         )
                     }
@@ -1589,6 +1751,8 @@ private fun FanRemoteLayout(
                             modifier = Modifier.size(64.dp),
                             shape = CircleShape,
                             onLongClick = { onEdit(it) },
+                            onPressDown = { onBlastDown?.invoke(it) ?: onBlast(it) },
+                            onPressUp = onBlastUp,
                             onClick = { onBlast(it) }
                         )
                     }
@@ -1665,6 +1829,8 @@ private fun FanRemoteLayout(
         hapticsEnabled = hapticsEnabled,
         isEditMode = isEditMode,
         onBlast = onBlast,
+        onBlastDown = onBlastDown,
+        onBlastUp = onBlastUp,
         onEdit = onEdit
     )
 }
@@ -1679,6 +1845,8 @@ private fun RenderAdditionalButtons(
     hapticsEnabled: Boolean,
     isEditMode: Boolean,
     onBlast: (SavedButton) -> Unit,
+    onBlastDown: ((SavedButton) -> Unit)? = null,
+    onBlastUp: (() -> Unit)? = null,
     onEdit: (SavedButton) -> Unit
 ) {
     if (buttons.isNotEmpty()) {
@@ -1707,6 +1875,8 @@ private fun RenderAdditionalButtons(
                         .height(46.dp)
                         .defaultMinSize(minWidth = 80.dp),
                     onLongClick = { onEdit(btn) },
+                    onPressDown = { onBlastDown?.invoke(btn) ?: onBlast(btn) },
+                    onPressUp = onBlastUp,
                     onClick = { onBlast(btn) }
                 )
             }

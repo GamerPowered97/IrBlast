@@ -8,7 +8,7 @@ import com.example.irblast.data.ir.encoders.NecEncoder
 import com.example.irblast.domain.model.SavedButton
 import com.example.irblast.domain.model.SavedRemote
 
-class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_remotes.db", null, 2) {
+class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_remotes.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""
@@ -19,7 +19,8 @@ class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_rem
                 device_type TEXT NOT NULL,
                 category TEXT NOT NULL,
                 icon TEXT NOT NULL,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                is_favorite INTEGER NOT NULL DEFAULT 0
             )
         """.trimIndent())
 
@@ -48,9 +49,13 @@ class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_rem
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS saved_buttons")
-        db.execSQL("DROP TABLE IF EXISTS saved_remotes")
-        onCreate(db)
+        if (oldVersion < 3) {
+            try {
+                db.execSQL("ALTER TABLE saved_remotes ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0")
+            } catch (e: Exception) {
+                // In case column was already created
+            }
+        }
     }
 
     private fun seedInitialRemote(db: SQLiteDatabase) {
@@ -103,7 +108,10 @@ class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_rem
     fun getAllRemotes(): List<SavedRemote> {
         val db = readableDatabase
         val list = mutableListOf<SavedRemote>()
-        val cursor = db.rawQuery("SELECT id, name, brand, device_type, category, icon, created_at FROM saved_remotes ORDER BY created_at DESC", null)
+        val cursor = db.rawQuery(
+            "SELECT id, name, brand, device_type, category, icon, created_at, is_favorite FROM saved_remotes ORDER BY is_favorite DESC, created_at DESC",
+            null
+        )
         cursor.use {
             while (it.moveToNext()) {
                 list.add(
@@ -114,7 +122,8 @@ class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_rem
                         deviceType = it.getString(3),
                         category = it.getString(4),
                         icon = it.getString(5),
-                        createdAt = it.getLong(6)
+                        createdAt = it.getLong(6),
+                        isFavorite = it.getInt(7) == 1
                     )
                 )
             }
@@ -124,7 +133,10 @@ class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_rem
 
     fun getRemoteById(id: Long): SavedRemote? {
         val db = readableDatabase
-        val cursor = db.rawQuery("SELECT id, name, brand, device_type, category, icon, created_at FROM saved_remotes WHERE id = ?", arrayOf(id.toString()))
+        val cursor = db.rawQuery(
+            "SELECT id, name, brand, device_type, category, icon, created_at, is_favorite FROM saved_remotes WHERE id = ?",
+            arrayOf(id.toString())
+        )
         cursor.use {
             if (it.moveToNext()) {
                 return SavedRemote(
@@ -134,7 +146,8 @@ class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_rem
                     deviceType = it.getString(3),
                     category = it.getString(4),
                     icon = it.getString(5),
-                    createdAt = it.getLong(6)
+                    createdAt = it.getLong(6),
+                    isFavorite = it.getInt(7) == 1
                 )
             }
         }
@@ -150,6 +163,7 @@ class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_rem
             put("category", remote.category)
             put("icon", remote.icon)
             put("created_at", remote.createdAt)
+            put("is_favorite", if (remote.isFavorite) 1 else 0)
         }
         return db.insert("saved_remotes", null, cv)
     }
@@ -162,8 +176,17 @@ class UserRemoteDatabase(context: Context) : SQLiteOpenHelper(context, "user_rem
             put("device_type", remote.deviceType)
             put("category", remote.category)
             put("icon", remote.icon)
+            put("is_favorite", if (remote.isFavorite) 1 else 0)
         }
         db.update("saved_remotes", cv, "id = ?", arrayOf(remote.id.toString()))
+    }
+
+    fun toggleFavorite(remoteId: Long, isFavorite: Boolean) {
+        val db = writableDatabase
+        val cv = ContentValues().apply {
+            put("is_favorite", if (isFavorite) 1 else 0)
+        }
+        db.update("saved_remotes", cv, "id = ?", arrayOf(remoteId.toString()))
     }
 
     fun deleteRemote(remoteId: Long) {

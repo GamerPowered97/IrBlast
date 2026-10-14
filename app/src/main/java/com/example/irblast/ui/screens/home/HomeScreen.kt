@@ -23,14 +23,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.StarBorder
+import com.example.irblast.data.ir.FlipperZeroIrParser
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -102,6 +110,53 @@ fun HomeScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var remoteToDelete by remember { mutableStateOf<SavedRemote?>(null) }
 
+    val filterCategories = listOf("All", "⭐ Favorites", "TV", "AC / Climate", "Audio", "Projector", "Set-Top Box", "Media Player", "Other")
+    var selectedFilter by remember { mutableStateOf("All") }
+
+    val filteredRemotes = remember(remotes, selectedFilter) {
+        val base = when (selectedFilter) {
+            "All" -> remotes
+            "⭐ Favorites" -> remotes.filter { it.isFavorite }
+            else -> remotes.filter {
+                it.category.equals(selectedFilter, ignoreCase = true) ||
+                it.deviceType.contains(selectedFilter, ignoreCase = true)
+            }
+        }
+        base.sortedWith(compareByDescending<SavedRemote> { it.isFavorite }.thenByDescending { it.createdAt })
+    }
+
+    val irPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val text = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+                    if (text.isNotBlank()) {
+                        val flipperRemote = FlipperZeroIrParser.parse(text, "Imported Remote")
+                        if (flipperRemote.signals.isNotEmpty()) {
+                            val (newRemote, newButtons) = FlipperZeroIrParser.toSavedEntities(flipperRemote)
+                            val id = container.remoteRepository.saveRemote(newRemote, newButtons)
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Imported '${newRemote.name}' with ${newButtons.size} buttons!", Toast.LENGTH_SHORT).show()
+                                onNavigate(RemoteControl(id))
+                            }
+                        } else {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "No IR signals found in file", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Import failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         container.remoteRepository.refreshRemotes()
     }
@@ -164,7 +219,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Quick Hub Actions
+            // Quick Hub Actions - Row 1
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -184,7 +239,15 @@ fun HomeScreen(
                 ) {
                     onNavigate(CodeFinder())
                 }
+            }
 
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Quick Hub Actions - Row 2
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 QuickActionChip(
                     icon = Icons.Default.Tune,
                     label = "Custom IR",
@@ -192,9 +255,35 @@ fun HomeScreen(
                 ) {
                     onNavigate(CustomSignal)
                 }
+
+                QuickActionChip(
+                    icon = Icons.Default.FileUpload,
+                    label = "Import .ir",
+                    modifier = Modifier.weight(1f)
+                ) {
+                    irPickerLauncher.launch("*/*")
+                }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Filter Chips
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                filterCategories.forEach { cat ->
+                    FilterChip(
+                        selected = selectedFilter == cat,
+                        onClick = { selectedFilter = cat },
+                        label = { Text(cat, fontSize = 12.sp) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -202,13 +291,13 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "My Remotes",
+                    text = if (selectedFilter == "All") "My Remotes" else selectedFilter,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "${remotes.size} saved",
+                    text = "${filteredRemotes.size} saved",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -216,7 +305,7 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            if (remotes.isEmpty()) {
+            if (filteredRemotes.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -224,16 +313,16 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "📱", fontSize = 48.sp)
+                        Text(text = if (selectedFilter == "⭐ Favorites") "⭐" else "📱", fontSize = 48.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "No saved remotes yet",
+                            text = if (selectedFilter == "⭐ Favorites") "No favorite remotes yet" else "No remotes found",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Browse brands or use Code Finder to add your first remote",
+                            text = if (selectedFilter == "⭐ Favorites") "Tap the ⭐ on any remote to pin it to favorites" else "Browse brands, use Code Finder, or import a .ir file",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -245,10 +334,15 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 88.dp)
                 ) {
-                    items(remotes, key = { it.id }) { remote ->
+                    items(filteredRemotes, key = { it.id }) { remote ->
                         RemoteCard(
                             remote = remote,
                             onClick = { onNavigate(RemoteControl(remote.id)) },
+                            onToggleFavorite = {
+                                coroutineScope.launch {
+                                    container.remoteRepository.toggleFavorite(remote.id, !remote.isFavorite)
+                                }
+                            },
                             onDelete = { remoteToDelete = remote },
                             onQuickPower = {
                                 coroutineScope.launch {
@@ -375,6 +469,7 @@ private fun QuickActionChip(
 private fun RemoteCard(
     remote: SavedRemote,
     onClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onDelete: () -> Unit,
     onQuickPower: () -> Unit
 ) {
@@ -388,7 +483,10 @@ private fun RemoteCard(
             containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+        border = BorderStroke(
+            1.dp,
+            if (remote.isFavorite) Color(0xFFFFB300).copy(alpha = 0.6f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+        )
     ) {
         Row(
             modifier = Modifier
@@ -416,12 +514,18 @@ private fun RemoteCard(
                 Spacer(modifier = Modifier.width(12.dp))
 
                 Column {
-                    Text(
-                        text = remote.name,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = remote.name,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (remote.isFavorite) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "⭐", fontSize = 12.sp)
+                        }
+                    }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "${remote.brand} • ${remote.deviceType}",
@@ -432,10 +536,25 @@ private fun RemoteCard(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Favorite Star Button
+                IconButton(
+                    onClick = onToggleFavorite,
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Icon(
+                        imageVector = if (remote.isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                        contentDescription = if (remote.isFavorite) "Remove from favorites" else "Add to favorites",
+                        tint = if (remote.isFavorite) Color(0xFFFFB300) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(2.dp))
+
                 // Quick Power Button
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(38.dp)
                         .clip(CircleShape)
                         .background(IrError.copy(alpha = 0.15f))
                         .border(1.dp, IrError.copy(alpha = 0.4f), CircleShape)
@@ -446,11 +565,11 @@ private fun RemoteCard(
                         imageVector = Icons.Default.PowerSettingsNew,
                         contentDescription = "Power",
                         tint = IrError,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(2.dp))
 
                 IconButton(
                     onClick = onDelete,

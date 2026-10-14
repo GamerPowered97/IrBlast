@@ -7,7 +7,8 @@ data class SavedRemote(
     val deviceType: String,
     val category: String,
     val icon: String = "📺",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val isFavorite: Boolean = false
 )
 
 data class SavedButton(
@@ -24,11 +25,22 @@ data class SavedButton(
     val sortOrder: Int = 0,
     val colSpan: Int = 1
 ) {
+    @Transient
+    @Volatile
+    private var cachedPattern: IntArray? = null
+
     fun toPatternIntArray(): IntArray {
-        if (patternMicros.isBlank()) return intArrayOf()
-        return patternMicros.split(Regex("[,\\s;]+"))
+        cachedPattern?.let { return it }
+        if (patternMicros.isBlank()) {
+            val empty = intArrayOf()
+            cachedPattern = empty
+            return empty
+        }
+        val parsed = patternMicros.split(Regex("[,\\s;]+"))
             .filter { it.isNotBlank() }
             .mapNotNull { it.trim().toIntOrNull() }
             .toIntArray()
+        cachedPattern = parsed
+        return parsed
     }
 }

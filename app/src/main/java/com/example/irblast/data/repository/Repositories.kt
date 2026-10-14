@@ -85,6 +85,11 @@ class RemoteRepository(
         refreshRemotes()
     }
 
+    suspend fun toggleFavorite(remoteId: Long, isFavorite: Boolean) = withContext(Dispatchers.IO) {
+        userDb.toggleFavorite(remoteId, isFavorite)
+        refreshRemotes()
+    }
+
     suspend fun saveButton(button: SavedButton): Long = withContext(Dispatchers.IO) {
         val id = if (button.id == 0L) {
             userDb.insertButton(button)

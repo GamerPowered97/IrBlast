@@ -61,6 +61,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.irblast.theme.IrError
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+
 enum class ButtonStyleVariant {
     STANDARD,
     POWER,
@@ -68,7 +76,19 @@ enum class ButtonStyleVariant {
     CIRCLE
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+fun isRepeatableAction(label: String, icon: String = ""): Boolean {
+    val key = (icon.ifBlank { label }).trim().uppercase()
+    val lbl = label.trim().uppercase()
+    return key in listOf("UP", "DOWN", "LEFT", "RIGHT", "VOL_UP", "VOL_DOWN", "CH_UP", "CH_DOWN") ||
+            lbl in listOf("UP", "DOWN", "LEFT", "RIGHT", "VOL +", "VOL -", "CH +", "CH -", "VOL+", "VOL-", "CH+", "CH-", "VOL UP", "VOL DOWN", "CH UP", "CH DOWN") ||
+            lbl.startsWith("TEMP +") || lbl.startsWith("TEMP -") || lbl.startsWith("TEMP+") || lbl.startsWith("TEMP-") ||
+            lbl.contains("VOLUME +") || lbl.contains("VOLUME -") ||
+            lbl.contains("CHANNEL +") || lbl.contains("CHANNEL -") ||
+            lbl.contains("SPEED +") || lbl.contains("SPEED -") ||
+            lbl.contains("FAN +") || lbl.contains("FAN -") ||
+            key.contains("TEMP") || key.contains("SPEED")
+}
+
 @Composable
 fun IrButton(
     label: String,
@@ -78,21 +98,23 @@ fun IrButton(
     hapticsEnabled: Boolean = true,
     enabled: Boolean = true,
     isEditMode: Boolean = false,
+    isRepeatable: Boolean = isRepeatableAction(label, icon),
     shape: Shape = if (variant == ButtonStyleVariant.CIRCLE) CircleShape else RoundedCornerShape(16.dp),
     onLongClick: (() -> Unit)? = null,
-    onClick: () -> Unit
+    onPressDown: (() -> Unit)? = null,
+    onPressUp: (() -> Unit)? = null,
+    onClick: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
+    var isPressedManually by remember { mutableStateOf(false) }
 
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.90f else 1.0f,
+        targetValue = if (isPressedManually) 0.90f else 1.0f,
         animationSpec = spring(dampingRatio = 0.55f, stiffness = 420f),
         label = "button_scale"
     )
 
-    val shadowElevation = if (isPressed) 1.dp else when (variant) {
+    val shadowElevation = if (isPressedManually) 1.dp else when (variant) {
         ButtonStyleVariant.POWER -> 6.dp
         ButtonStyleVariant.ACCENT -> 5.dp
         ButtonStyleVariant.CIRCLE -> 3.dp
@@ -101,19 +123,19 @@ fun IrButton(
 
     val brush = when (variant) {
         ButtonStyleVariant.POWER -> Brush.verticalGradient(
-            colors = if (isPressed) listOf(IrError.copy(alpha = 0.85f), IrError.copy(alpha = 0.70f))
+            colors = if (isPressedManually) listOf(IrError.copy(alpha = 0.85f), IrError.copy(alpha = 0.70f))
             else listOf(Color(0xFFFF5E62), Color(0xFFFF2548))
         )
         ButtonStyleVariant.ACCENT -> Brush.verticalGradient(
-            colors = if (isPressed) listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.85f), MaterialTheme.colorScheme.primary.copy(alpha = 0.70f))
+            colors = if (isPressedManually) listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.85f), MaterialTheme.colorScheme.primary.copy(alpha = 0.70f))
             else listOf(Color(0xFF8075FF), MaterialTheme.colorScheme.primary)
         )
         ButtonStyleVariant.CIRCLE -> Brush.verticalGradient(
-            colors = if (isPressed) listOf(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f), MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            colors = if (isPressedManually) listOf(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f), MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
             else listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surface)
         )
         ButtonStyleVariant.STANDARD -> Brush.verticalGradient(
-            colors = if (isPressed) listOf(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f), MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            colors = if (isPressedManually) listOf(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f), MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
             else listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surface)
         )
     }
@@ -127,14 +149,64 @@ fun IrButton(
     val borderColor = if (isEditMode) {
         Color(0xFFFFA502) // Amber indicator for edit mode
     } else when (variant) {
-        ButtonStyleVariant.POWER -> if (isPressed) Color.White.copy(alpha = 0.6f) else Color(0xFFFF8A9E).copy(alpha = 0.5f)
-        ButtonStyleVariant.ACCENT -> if (isPressed) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-        else -> if (isPressed) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+        ButtonStyleVariant.POWER -> if (isPressedManually) Color.White.copy(alpha = 0.6f) else Color(0xFFFF8A9E).copy(alpha = 0.5f)
+        ButtonStyleVariant.ACCENT -> if (isPressedManually) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+        else -> if (isPressedManually) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     }
 
     val imageVector = remember(icon, label) { getIconVector(icon, label) }
 
     val hasIconAndLabel = imageVector != null && label.isNotBlank() && variant != ButtonStyleVariant.CIRCLE
+
+    val touchModifier = if (!enabled) {
+        Modifier
+    } else if (isEditMode) {
+        Modifier.pointerInput(Unit) {
+            detectTapGestures(
+                onTap = { onClick() },
+                onLongPress = { onLongClick?.invoke() }
+            )
+        }
+    } else if (isRepeatable && onPressDown != null) {
+        Modifier.pointerInput(hapticsEnabled, onPressDown, onPressUp) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                down.consume()
+                isPressedManually = true
+                if (hapticsEnabled) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                }
+                onPressDown()
+                waitForUpOrCancellation()
+                isPressedManually = false
+                onPressUp?.invoke()
+            }
+        }
+    } else {
+        Modifier.pointerInput(hapticsEnabled, onLongClick, onClick) {
+            detectTapGestures(
+                onPress = {
+                    isPressedManually = true
+                    tryAwaitRelease()
+                    isPressedManually = false
+                },
+                onTap = {
+                    if (hapticsEnabled) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    }
+                    onClick()
+                },
+                onLongPress = if (onLongClick != null) {
+                    {
+                        if (hapticsEnabled) {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        }
+                        onLongClick()
+                    }
+                } else null
+            )
+        }
+    }
 
     Box(
         modifier = modifier
@@ -148,25 +220,7 @@ fun IrButton(
                 color = borderColor,
                 shape = shape
             )
-            .combinedClickable(
-                interactionSource = interactionSource,
-                indication = null,
-                enabled = enabled,
-                onClick = {
-                    if (hapticsEnabled) {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    }
-                    onClick()
-                },
-                onLongClick = if (onLongClick != null) {
-                    {
-                        if (hapticsEnabled) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        }
-                        onLongClick()
-                    }
-                } else null
-            )
+            .then(touchModifier)
             .padding(horizontal = 8.dp, vertical = if (hasIconAndLabel) 4.dp else 8.dp),
         contentAlignment = Alignment.Center
     ) {

@@ -49,6 +49,16 @@ object ProtocolEncoder {
             proto.startsWith("AIWA") -> {
                 AiwaEncoder.encode(device, subDevice, function, repeats = 2)
             }
+            proto.startsWith("RCA") -> {
+                val is38k = proto.contains("38")
+                RcaEncoder.encode(device, function, is38k = is38k, repeats = 2)
+            }
+            proto.startsWith("FUJITSU") -> {
+                FujitsuEncoder.encode(device, subDevice, function, repeats = 2)
+            }
+            proto.startsWith("DISH") -> {
+                DishNetworkEncoder.encode(device, subDevice, function, repeats = 3)
+            }
             else -> {
                 // Fallback for generic NEC-derived or unknown
                 if (proto.contains("NEC")) {

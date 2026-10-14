@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +38,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.example.irblast.data.settings.JsonBackupManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.example.irblast.IrBlastAppContainer
 import com.example.irblast.data.settings.ThemeMode
 import com.example.irblast.theme.IrSuccess
@@ -47,12 +62,44 @@ fun SettingsScreen(
     container: IrBlastAppContainer,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val themeMode by container.appSettingsManager.themeMode.collectAsState()
     val hapticsEnabled by container.appSettingsManager.hapticsEnabled.collectAsState()
     val scanDelayMs by container.appSettingsManager.defaultScanDelay.collectAsState()
 
     val isHardwareAvailable = container.irBlasterManager.isHardwareAvailable
     val frequencyRanges = container.irBlasterManager.supportedFrequencyRanges
+
+    val restoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val json = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+                    val restored = JsonBackupManager.importFromJson(json)
+                    if (restored.isNotEmpty()) {
+                        for ((remote, buttons) in restored) {
+                            container.remoteRepository.saveRemote(remote, buttons)
+                        }
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "Successfully restored ${restored.size} remotes!", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(context, "No remotes found in backup file", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Restore failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -270,6 +317,74 @@ fun SettingsScreen(
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+
+            // Backup & Restore Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Backup & Restore (JSON)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Export a full JSON backup of all your saved remotes and buttons, or restore them anytime.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    val remotes = container.remoteRepository.getAllRemotes()
+                                    val list = remotes.map { remote ->
+                                        val buttons = container.remoteRepository.getButtonsForRemote(remote.id)
+                                        remote to buttons
+                                    }
+                                    val jsonStr = JsonBackupManager.exportToJson(list)
+                                    withContext(Dispatchers.Main) {
+                                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/json"
+                                            putExtra(Intent.EXTRA_TEXT, jsonStr)
+                                            putExtra(Intent.EXTRA_TITLE, "irblast_backup.json")
+                                        }
+                                        context.startActivity(Intent.createChooser(sendIntent, "Export IrBlast Backup"))
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(imageVector = Icons.Default.FileDownload, contentDescription = "Export Backup", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Export", fontSize = 13.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                restoreLauncher.launch("application/json")
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(imageVector = Icons.Default.FileUpload, contentDescription = "Restore Backup", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Restore", fontSize = 13.sp)
+                        }
+                    }
                 }
             }
 
